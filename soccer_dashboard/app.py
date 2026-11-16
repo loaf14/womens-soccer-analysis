@@ -7,6 +7,10 @@ from dash import Dash, Input, Output, dcc, html
 
 from soccer_dashboard.sankey import create_sankey_figure
 from soccer_dashboard.shot_map import create_shot_map, prepare_shot_coordinates
+from soccer_dashboard.shot_conversion import (
+    create_conversion_figure,
+    prepare_conversion_data,
+)
 from soccer_dashboard.storage import load_local_shots
 
 COMPETITION_VALUES = {
@@ -98,6 +102,8 @@ def create_app(shots: pd.DataFrame) -> Dash:
     total_shots = len(shots)
     conversion_rate = goals / total_shots * 100 if total_shots else 0
     matches = int(shots.groupby(["competition_name", "match_id"]).ngroups)
+    conversion_figure = create_conversion_figure(shots)
+    _, conversion_missing_locations = prepare_conversion_data(shots)
     map_shots = prepare_shot_coordinates(shots)
     shots_outside_half = int(
         (
@@ -489,11 +495,42 @@ def create_app(shots: pd.DataFrame) -> Dash:
                     ),
                     html.Div(
                         [
-                            _chart_placeholder(
-                                "Shot conversion comparison",
-                                "Goals scored relative to total attempts.",
-                                "shot-conversion-placeholder",
-                                "PHASE 04",
+                            html.Section(
+                                [
+                                    html.Div(
+                                        [
+                                            html.H2(
+                                                "Shot conversion comparison",
+                                                className="section-title",
+                                            ),
+                                            html.P(
+                                                "Goal conversion by shot location. "
+                                                "Differences are descriptive and "
+                                                "do not imply statistical "
+                                                "significance.",
+                                                className="section-subtitle",
+                                            ),
+                                        ],
+                                        className="visualization-heading",
+                                    ),
+                                    dcc.Graph(
+                                        id="shot-conversion-chart",
+                                        figure=conversion_figure,
+                                        config={
+                                            "displayModeBar": False,
+                                            "responsive": True,
+                                        },
+                                        className="conversion-chart",
+                                    ),
+                                    html.P(
+                                        f"Shots with missing location excluded: "
+                                        f"{conversion_missing_locations:,}. "
+                                        "Groups with no shots have no conversion "
+                                        "rate.",
+                                        className="conversion-method-note",
+                                    ),
+                                ],
+                                className="visualization-card conversion-card",
                             ),
                             _chart_placeholder(
                                 "Shot characteristics",
