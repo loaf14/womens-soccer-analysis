@@ -15,23 +15,45 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-## Data integration
+## Prepare data
 
-The `soccer_dashboard.data.load_shots` function retrieves competition metadata,
-matches, and shot events for the requested StatsBomb competition and season. It
-returns one Pandas DataFrame with shot details, competition and season names,
-and an `in_box` indicator based on StatsBomb's 120-by-80 pitch coordinates.
+Build a local Parquet cache of NWSL 2023 and FA Women's Super League 2023/24 shot
+events:
 
-```python
-from soccer_dashboard.data import load_shots
-
-shots = load_shots(competition_id=49, season_id=107)
+```powershell
+python -m soccer_dashboard.build_data
 ```
 
-The function uses StatsBomb Open Data accessed via `statsbombpy`. Data
-availability is determined by StatsBomb; the dashboard does not bundle or
-fabricate match data. The existing [`exploration.ipynb`](./exploration.ipynb)
-is retained as the original exploratory notebook.
+The command downloads each configured season from StatsBomb Open Data once and
+writes `data/shots.parquet`. To choose another output location or verify the
+historical combined count:
+
+```powershell
+python -m soccer_dashboard.build_data --output data/shots.parquet --expected-total 7059
+```
+
+The preserved notebook records a historical baseline of 7,059 shots: 3,530
+NWSL shots (2023) and 3,529 FA Women's Super League shots (2023/24). This is a
+baseline, not a guarantee that the upstream open-data source will never change.
+Use `--expected-total 7059` to fail the build if the live source no longer
+matches it.
+
+The source is StatsBomb Open Data, retrieved via `statsbombpy`; data availability
+is determined by StatsBomb. Please credit [StatsBomb Open
+Data](https://github.com/statsbomb/open-data) when using the data. Generated
+Parquet data is local, gitignored, and is not included in the repository. If the
+cache is missing, run the build command above; the dashboard reports the
+regeneration command in its error message.
+
+## Run the dashboard
+
+```powershell
+python -m soccer_dashboard.app
+```
+
+The app loads the local Parquet cache rather than making network requests during
+startup and displays the total shots across both seasons. The existing
+[`exploration.ipynb`](./exploration.ipynb) is retained unchanged.
 
 ## Tests
 

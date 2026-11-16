@@ -31,8 +31,13 @@ def _location_is_in_box(location: object, event_id: object) -> bool:
         or not isinstance(location[1], Real)
         or not math.isfinite(float(location[0]))
         or not math.isfinite(float(location[1]))
+        or not 0 <= location[0] <= 120
+        or not 0 <= location[1] <= 80
     ):
-        raise ValueError(f"Shot event {event_id!r} has an invalid location: {location!r}")
+        raise ValueError(
+            f"Shot event {event_id!r} has an invalid StatsBomb pitch location: "
+            f"{location!r}"
+        )
 
     x, y = location[:2]
     return x >= 102 and 18 <= y <= 62
@@ -42,8 +47,9 @@ def load_shots(competition_id: int, season_id: int) -> pd.DataFrame:
     """Fetch all shot events for a StatsBomb competition season.
 
     The returned ``in_box`` value identifies shots at x >= 102 and 18 <= y <= 62
-    on StatsBomb's 120-by-80 pitch. Missing or malformed shot coordinates raise
-    ``ValueError`` instead of being silently counted as outside the box.
+    on StatsBomb's 120-by-80 pitch. Missing, malformed, or out-of-bounds shot
+    coordinates raise ``ValueError`` instead of being silently counted as
+    outside the box.
     """
     competitions = sb.competitions()
     required_metadata = {"competition_id", "season_id", "competition_name", "season_name"}
