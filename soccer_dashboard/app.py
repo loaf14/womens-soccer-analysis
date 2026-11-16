@@ -516,11 +516,10 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                     dcc.Graph(
                                         id="shot-conversion-chart",
                                         figure=conversion_figure,
-                                        config={
-                                            "displayModeBar": False,
-                                            "responsive": True,
-                                        },
+                                        config={"displayModeBar": False},
+                                        responsive=True,
                                         className="conversion-chart",
+                                        style={"height": "260px"},
                                     ),
                                     html.P(
                                         f"Shots with missing location excluded: "

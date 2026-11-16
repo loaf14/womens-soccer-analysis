@@ -91,6 +91,10 @@ def test_chart_marker_positions_and_hover_match_group_calculations(conversion_sh
     assert "Conversion rate: %{customdata[2]:.1f}%" in nws.hovertemplate
     assert figure.layout.xaxis.range[0] == 0
     assert figure.layout.xaxis.ticksuffix == "%"
+    assert figure.layout.height == 260
+    assert figure.layout.legend.orientation == "h"
+    assert figure.layout.legend.x == 0
+    assert figure.layout.legend.xanchor == "left"
     assert [trace.name for trace in figure.data if trace.mode == "lines"] == [
         "Inside box connector",
         "Outside box connector",

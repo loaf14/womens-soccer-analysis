@@ -388,6 +388,9 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
         components["sankey-goals-graph"]["figure"]["data"][0]["node"]["customdata"]
     ) == {"Play pattern", "Shot location", "Body part"}
     conversion_figure = components["shot-conversion-chart"]["figure"]
+    assert components["shot-conversion-chart"]["style"] == {"height": "260px"}
+    assert components["shot-conversion-chart"]["responsive"] is True
+    assert conversion_figure["layout"]["height"] == 260
     assert all(trace["type"] == "scatter" for trace in conversion_figure["data"])
     conversion_traces = {
         trace["name"]: trace
@@ -567,5 +570,6 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b".sankey-graph .svg-container" in response.data
     assert b".sankey-toggle" in response.data
     assert b".conversion-chart" in response.data
+    assert b".conversion-card .visualization-heading" in response.data
     assert b".dashboard-dropdown.is-focused .Select-control" in response.data
     assert b".VirtualizedSelectSelectedOption" in response.data
