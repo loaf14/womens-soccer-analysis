@@ -222,6 +222,13 @@ a {
   border-color: #698374;
 }
 
+.dashboard-dropdown.is-focused .Select-control,
+.dashboard-dropdown .Select-control:focus-within {
+  border-color: var(--color-pitch);
+  outline: 2px solid var(--color-pitch);
+  outline-offset: 2px;
+}
+
 .dashboard-dropdown .Select-placeholder,
 .dashboard-dropdown .Select-value-label,
 .dashboard-dropdown .Select-input > input {
@@ -247,8 +254,10 @@ a {
   color: var(--color-text);
 }
 
-.dashboard-dropdown .VirtualizedSelectFocusedOption {
-  background: #21352a;
+.dashboard-dropdown .VirtualizedSelectOption:hover,
+.dashboard-dropdown .VirtualizedSelectFocusedOption,
+.dashboard-dropdown .VirtualizedSelectSelectedOption {
+  background: #294233;
   color: #fff;
 }
 

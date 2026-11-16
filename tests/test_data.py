@@ -325,6 +325,34 @@ def test_dashboard_has_all_four_visualization_placeholders(dashboard_shots):
     }.issubset(components)
 
 
+def test_season_chips_are_valid_direct_header_children(dashboard_shots):
+    app = create_app(dashboard_shots)
+    layout = app.server.test_client().get("/_dash-layout").get_json()
+    hero = layout["props"]["children"][0]
+    hero_copy = hero["props"]["children"][0]
+    children = hero_copy["props"]["children"]
+    season_chips = children[-1]
+
+    assert season_chips["type"] == "Div"
+    assert season_chips["props"]["className"] == "season-line"
+    assert sum(
+        component["props"].get("className") == "season-line"
+        for component in children
+    ) == 1
+
+
+def test_sankey_placeholder_copy_describes_categories_not_a_timeline(
+    dashboard_shots,
+):
+    app = create_app(dashboard_shots)
+    layout = app.server.test_client().get("/_dash-layout").get_data(as_text=True)
+
+    assert "How shot characteristics connect" in layout
+    assert "play pattern, shot location, body part, and outcome" in layout
+    assert "actions leading to a shot" not in layout
+    assert "How attacks unfold" not in layout
+
+
 def test_dashboard_stylesheet_is_served(dashboard_shots):
     app = create_app(dashboard_shots)
 
@@ -332,3 +360,5 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
 
     assert response.status_code == 200
     assert b"--color-page: #0b1110" in response.data
+    assert b".dashboard-dropdown.is-focused .Select-control" in response.data
+    assert b".VirtualizedSelectSelectedOption" in response.data

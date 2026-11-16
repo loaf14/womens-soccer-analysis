@@ -137,7 +137,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 "differ between the NWSL and FA Women's Super League?",
                                 className="hero-subtitle",
                             ),
-                            html.P(season_summary, className="season-line"),
+                            season_summary,
                         ],
                         className="hero-copy",
                     ),
@@ -285,8 +285,9 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         className="section-kicker",
                     ),
                     _chart_placeholder(
-                        "How attacks unfold",
-                        "A sequence view of the actions leading to a shot.",
+                        "How shot characteristics connect",
+                        "Explore associations among play pattern, shot location, "
+                        "body part, and outcome.",
                         "sankey-placeholder",
                         "PHASE 04",
                         "sankey-card",
