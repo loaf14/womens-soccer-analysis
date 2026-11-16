@@ -11,6 +11,10 @@ from soccer_dashboard.shot_conversion import (
     create_conversion_figure,
     prepare_conversion_data,
 )
+from soccer_dashboard.play_pattern import (
+    create_play_pattern_figure,
+    prepare_play_pattern_data,
+)
 from soccer_dashboard.storage import load_local_shots
 
 COMPETITION_VALUES = {
@@ -61,41 +65,6 @@ def _metric_card(label: str, value: str, detail: str, card_id: str) -> html.Arti
     )
 
 
-def _chart_placeholder(
-    heading: str,
-    subtitle: str,
-    component_id: str,
-    phase: str,
-    class_name: str = "",
-) -> html.Section:
-    return html.Section(
-        [
-            html.Div(
-                [
-                    html.H2(heading, className="section-title"),
-                    html.P(subtitle, className="section-subtitle"),
-                ],
-                className="visualization-heading",
-            ),
-            html.Div(
-                [
-                    html.Span(phase, className="placeholder-index"),
-                    html.P("Visualization coming next", className="placeholder-title"),
-                    html.P(
-                        "This space is reserved for the interactive analysis.",
-                        className="placeholder-copy",
-                    ),
-                ],
-                id=component_id,
-                className="visualization-placeholder",
-                role="img",
-                **{"aria-label": f"{heading} visualization placeholder"},
-            ),
-        ],
-        className=f"visualization-card {class_name}".strip(),
-    )
-
-
 def create_app(shots: pd.DataFrame) -> Dash:
     """Create the dashboard using an already loaded shot dataset."""
     goals = int(shots["shot_outcome"].eq("Goal").sum())
@@ -104,6 +73,8 @@ def create_app(shots: pd.DataFrame) -> Dash:
     matches = int(shots.groupby(["competition_name", "match_id"]).ngroups)
     conversion_figure = create_conversion_figure(shots)
     _, conversion_missing_locations = prepare_conversion_data(shots)
+    play_pattern_figure = create_play_pattern_figure(shots)
+    _, missing_play_patterns = prepare_play_pattern_data(shots)
     map_shots = prepare_shot_coordinates(shots)
     shots_outside_half = int(
         (
@@ -531,11 +502,49 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 ],
                                 className="visualization-card conversion-card",
                             ),
-                            _chart_placeholder(
-                                "Shot characteristics",
-                                "Compare shot type, body part, and outcome.",
-                                "shot-characteristics-placeholder",
-                                "PHASE 04",
+                            html.Section(
+                                [
+                                    html.Div(
+                                        [
+                                            html.H2(
+                                                "Where Do Shots Come From?",
+                                                className="section-title",
+                                            ),
+                                            html.P(
+                                                "Distribution of shots by play "
+                                                "pattern across the NWSL and WSL.",
+                                                className="section-subtitle",
+                                            ),
+                                        ],
+                                        className="visualization-heading",
+                                    ),
+                                    dcc.Graph(
+                                        id="play-pattern-chart",
+                                        figure=play_pattern_figure,
+                                        config={"displayModeBar": False},
+                                        responsive=True,
+                                        className="play-pattern-chart",
+                                        style={
+                                            "height": (
+                                                f"{play_pattern_figure.layout.height}px"
+                                            )
+                                        },
+                                    ),
+                                    html.P(
+                                        f"Percentages use each league's total "
+                                        f"shots; missing play patterns "
+                                        f"({missing_play_patterns:,}) are shown "
+                                        "as a separate category. These values "
+                                        "describe shot distribution, not goal "
+                                        "conversion rates or the probability "
+                                        "of producing a shot from an attacking "
+                                        "opportunity.",
+                                        className="play-pattern-method-note",
+                                    ),
+                                ],
+                                className=(
+                                    "visualization-card play-pattern-card"
+                                ),
                             ),
                         ],
                         className="comparison-grid",
