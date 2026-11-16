@@ -6,6 +6,7 @@ import pandas as pd
 import plotly.graph_objects as go
 
 BODY_PART_RARE_SHARE = 0.01
+PLAY_PATTERN_RARE_SHARE = 0.01
 
 _STAGES = (
     ("play_pattern", "Play pattern"),
@@ -13,6 +14,7 @@ _STAGES = (
     ("body_part", "Body part"),
     ("outcome", "Outcome"),
 )
+_GOALS_ONLY_STAGES = _STAGES[:-1]
 _STAGE_COLORS = ("#62b88a", "#78a6d8", "#e0ad68", "#d78273")
 _LINK_COLORS = (
     "rgba(98,184,138,0.24)",
@@ -47,7 +49,21 @@ def _prepare_categories(shots: pd.DataFrame) -> pd.DataFrame:
         )
 
     categories = pd.DataFrame(index=shots.index)
-    categories["play_pattern"] = shots["play_pattern"].map(_category_label)
+    play_patterns = shots["play_pattern"].map(_category_label)
+    play_pattern_counts = play_patterns.value_counts()
+    rare_patterns = (
+        {
+            pattern
+            for pattern, count in play_pattern_counts.items()
+            if pattern not in {"Other", "Unknown"}
+            and count / len(shots) < PLAY_PATTERN_RARE_SHARE
+        }
+        if not shots.empty
+        else set()
+    )
+    categories["play_pattern"] = play_patterns.mask(
+        play_patterns.isin(rare_patterns), "Other"
+    )
     categories["shot_location"] = shots["in_box"].map(
         lambda value: (
             "Unknown"
@@ -84,22 +100,34 @@ def _stage_labels(categories: pd.DataFrame, column: str) -> list[str]:
     return sorted(counts.index, key=lambda label: (-counts[label], label.casefold()))
 
 
-def create_sankey_figure(shots: pd.DataFrame) -> go.Figure:
-    """Create links whose widths are shot counts for adjacent category stages.
+def create_sankey_figure(shots: pd.DataFrame, mode: str = "all") -> go.Figure:
+    """Create a shot-count Sankey for all shots or goals only.
 
-    Link hover percentages use the total shots leaving that link's source
-    category as their denominator. Missing or blank values are shown as
-    ``Unknown``; only the ``Goal`` outcome is classified as a goal, and other
-    valid outcomes are grouped as ``Non-goal``.
+    Play-pattern and body-part categories under 1% of the selected observations
+    are grouped as ``Other``. Link percentages use the selected-mode total
+    leaving the source category as their denominator; they are not conversion
+    rates. Missing or blank values are shown as ``Unknown``. In goals-only
+    mode, only observations with the literal ``Goal`` outcome are included and
+    the Outcome stage is omitted.
     """
-    categories = _prepare_categories(shots)
+    if mode not in {"all", "goals"}:
+        raise ValueError("Sankey mode must be 'all' or 'goals'.")
+    selected_shots = (
+        shots.loc[shots["shot_outcome"].eq("Goal")]
+        if mode == "goals"
+        else shots
+    )
+    categories = _prepare_categories(selected_shots)
+    stages = _GOALS_ONLY_STAGES if mode == "goals" else _STAGES
     node_labels: list[str] = []
     node_stages: list[str] = []
     node_colors: list[str] = []
     node_index: dict[tuple[str, str], int] = {}
     source_totals: dict[tuple[str, str], int] = {}
 
-    for (column, stage_label), color in zip(_STAGES, _STAGE_COLORS, strict=True):
+    for (column, stage_label), color in zip(
+        stages, _STAGE_COLORS[: len(stages)], strict=True
+    ):
         for label in _stage_labels(categories, column):
             node_index[(column, label)] = len(node_labels)
             node_labels.append(label)
@@ -114,7 +142,7 @@ def create_sankey_figure(shots: pd.DataFrame) -> go.Figure:
     link_colors: list[str] = []
 
     for stage_index, ((source_column, _), (target_column, _)) in enumerate(
-        zip(_STAGES[:-1], _STAGES[1:], strict=True)
+        zip(stages[:-1], stages[1:], strict=True)
     ):
         counts = (
             categories.groupby([source_column, target_column], sort=True)
@@ -142,6 +170,7 @@ def create_sankey_figure(shots: pd.DataFrame) -> go.Figure:
 
     figure = go.Figure(
         go.Sankey(
+            uid=f"shot-characteristics-sankey-{mode}",
             arrangement="snap",
             node={
                 "label": node_labels,
@@ -179,6 +208,6 @@ def create_sankey_figure(shots: pd.DataFrame) -> go.Figure:
         margin={"l": 12, "r": 12, "t": 20, "b": 12},
         height=700,
         autosize=True,
-        uirevision="shot-characteristics-sankey",
+        uirevision=f"shot-characteristics-sankey-{mode}",
     )
     return figure
