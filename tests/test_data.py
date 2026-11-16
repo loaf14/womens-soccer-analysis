@@ -16,45 +16,60 @@ def dashboard_shots():
                 "season_name": "2023",
                 "match_id": 1,
                 "location": [110.0, 40.0],
+                "in_box": True,
                 "team": "NWSL United",
                 "shot_outcome": "Goal",
                 "shot_type": "Open Play",
+                "play_pattern": "Regular Play",
+                "shot_body_part": "Right Foot",
             },
             {
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 1,
                 "location": [102.0, 18.0],
+                "in_box": True,
                 "team": "NWSL City",
                 "shot_outcome": "Saved",
                 "shot_type": "Corner",
+                "play_pattern": "From Corner",
+                "shot_body_part": "Left Foot",
             },
             {
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 2,
                 "location": [45.0, 40.0],
+                "in_box": False,
                 "team": "NWSL United",
                 "shot_outcome": "Blocked",
                 "shot_type": "Penalty",
+                "play_pattern": "Regular Play",
+                "shot_body_part": "Head",
             },
             {
                 "competition_name": "FA Women's Super League",
                 "season_name": "2023/2024",
                 "match_id": 1,
                 "location": [115.0, 40.0],
+                "in_box": True,
                 "team": "London WFC",
                 "shot_outcome": "Goal",
                 "shot_type": "Free Kick",
+                "play_pattern": "From Free Kick",
+                "shot_body_part": "Right Foot",
             },
             {
                 "competition_name": "FA Women's Super League",
                 "season_name": "2023/2024",
                 "match_id": 2,
                 "location": [60.0, 0.0],
+                "in_box": False,
                 "team": "London WFC",
                 "shot_outcome": "Off T",
                 "shot_type": "Open Play",
+                "play_pattern": "Regular Play",
+                "shot_body_part": "Head",
             },
         ]
     )
@@ -339,21 +354,103 @@ def test_dashboard_filters_use_available_dataset_values(dashboard_shots):
         assert {option["value"] for option in components[component_id]["options"]} == expected
 
 
-def test_dashboard_has_all_four_visualization_placeholders(dashboard_shots):
+def test_dashboard_has_all_visualizations(dashboard_shots):
     app = create_app(dashboard_shots)
     response = app.server.test_client().get("/_dash-layout")
     components = dict(_components_by_id(response.get_json()))
 
     assert {
-        "sankey-placeholder",
         "shot-conversion-placeholder",
         "shot-characteristics-placeholder",
     }.issubset(components)
+    assert "sankey-all-graph" in components
+    assert "sankey-goals-graph" in components
     assert "shot-map-graph" in components
+    assert components["sankey-mode"]["value"] == "all"
+    assert {
+        option["value"] for option in components["sankey-mode"]["options"]
+    } == {"all", "goals"}
+    assert components["sankey-observation-count"]["children"] == (
+        f"{len(dashboard_shots):,} shots represented"
+    )
+    sankey_figure = components["sankey-all-graph"]["figure"]
+    assert sankey_figure["data"][0]["type"] == "sankey"
+    assert sum(sankey_figure["data"][0]["link"]["value"]) == 3 * len(
+        dashboard_shots
+    )
     assert components["shot-map-view"]["value"] == "hybrid"
     assert {
         option["value"] for option in components["shot-map-view"]["options"]
     } == {"individual", "heatmap", "hybrid"}
+    assert components["sankey-goals-view"]["style"] == {"display": "none"}
+    assert set(
+        components["sankey-goals-graph"]["figure"]["data"][0]["node"]["customdata"]
+    ) == {"Play pattern", "Shot location", "Body part"}
+
+
+def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
+    app = create_app(dashboard_shots)
+    callback_output = next(
+        key
+        for key in app.callback_map
+        if "sankey-all-view.style" in key
+    )
+    outputs = [
+        {"id": "sankey-all-view", "property": "style"},
+        {"id": "sankey-goals-view", "property": "style"},
+        {"id": "sankey-observation-count", "property": "children"},
+        {"id": "sankey-mode-description", "property": "children"},
+    ]
+
+    def select_mode(mode):
+        response = app.server.test_client().post(
+            "/_dash-update-component",
+            json={
+                "output": callback_output,
+                "outputs": outputs,
+                "inputs": [{"id": "sankey-mode", "property": "value", "value": mode}],
+                "state": [],
+                "changedPropIds": ["sankey-mode.value"],
+            },
+        )
+        assert response.status_code == 200
+        return response.get_json()["response"]
+
+    goals_result = select_mode("goals")
+    goal_figure = app.server.test_client().get("/_dash-layout").get_json()
+    goal_components = dict(_components_by_id(goal_figure))
+    goal_figure = goal_components["sankey-goals-graph"]["figure"]["data"][0]
+    assert goals_result["sankey-all-view"]["style"] == {"display": "none"}
+    assert goals_result["sankey-goals-view"]["style"] == {"display": "block"}
+    assert set(goal_figure["node"]["customdata"]) == {
+        "Play pattern",
+        "Shot location",
+        "Body part",
+    }
+    assert goals_result["sankey-observation-count"]["children"] == "2 goals represented"
+    assert "goals only" in goals_result["sankey-mode-description"]["children"]
+    assert "not be compared as absolute counts" in goals_result[
+        "sankey-mode-description"
+    ]["children"]
+    assert sum(goal_figure["link"]["value"]) == 2 * 2
+
+    all_result = select_mode("all")
+    all_components = dict(
+        _components_by_id(app.server.test_client().get("/_dash-layout").get_json())
+    )
+    all_figure = all_components["sankey-all-graph"]["figure"]["data"][0]
+    assert all_result["sankey-all-view"]["style"] == {"display": "block"}
+    assert all_result["sankey-goals-view"]["style"] == {"display": "none"}
+    assert set(all_figure["node"]["customdata"]) == {
+        "Play pattern",
+        "Shot location",
+        "Body part",
+        "Outcome",
+    }
+    assert all_result["sankey-observation-count"]["children"] == (
+        f"{len(dashboard_shots):,} shots represented"
+    )
+    assert sum(all_figure["link"]["value"]) == 3 * len(dashboard_shots)
 
 
 @pytest.mark.parametrize(
@@ -428,7 +525,7 @@ def test_season_chips_are_valid_direct_header_children(dashboard_shots):
     ) == 1
 
 
-def test_sankey_placeholder_copy_describes_categories_not_a_timeline(
+def test_sankey_copy_describes_categorical_associations_and_denominator(
     dashboard_shots,
 ):
     app = create_app(dashboard_shots)
@@ -436,6 +533,10 @@ def test_sankey_placeholder_copy_describes_categories_not_a_timeline(
 
     assert "How shot characteristics connect" in layout
     assert "play pattern, shot location, body part, and outcome" in layout
+    assert "not goal conversion rates" in layout
+    assert "Play patterns and body parts below 1% are grouped as Other" in layout
+    assert "Missing outcomes are shown as Unknown" in layout
+    assert "Link widths are rescaled between modes" in layout
     assert "actions leading to a shot" not in layout
     assert "How attacks unfold" not in layout
 
@@ -447,5 +548,8 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
 
     assert response.status_code == 200
     assert b"--color-page: #0b1110" in response.data
+    assert b".sankey-graph" in response.data
+    assert b".sankey-graph .svg-container" in response.data
+    assert b".sankey-toggle" in response.data
     assert b".dashboard-dropdown.is-focused .Select-control" in response.data
     assert b".VirtualizedSelectSelectedOption" in response.data
