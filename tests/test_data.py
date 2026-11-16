@@ -359,9 +359,18 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     response = app.server.test_client().get("/_dash-layout")
     components = dict(_components_by_id(response.get_json()))
 
-    assert {
-        "shot-characteristics-placeholder",
-    }.issubset(components)
+    assert "shot-characteristics-placeholder" not in components
+    assert "play-pattern-chart" in components
+    assert components["play-pattern-chart"]["responsive"] is True
+    assert components["play-pattern-chart"]["style"]["height"].endswith("px")
+    play_pattern_figure = components["play-pattern-chart"]["figure"]
+    assert [trace["name"] for trace in play_pattern_figure["data"]] == [
+        "NWSL",
+        "WSL",
+    ]
+    assert play_pattern_figure["layout"]["height"] == int(
+        components["play-pattern-chart"]["style"]["height"][:-2]
+    )
     assert "shot-conversion-placeholder" not in components
     assert "shot-conversion-chart" in components
     assert "sankey-all-graph" in components
@@ -403,6 +412,12 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     )
     assert "Shots with missing location excluded: 0" in response.get_data(
         as_text=True
+    )
+    layout_text = response.get_data(as_text=True)
+    assert "Where Do Shots Come From?" in layout_text
+    assert "Distribution of shots by play pattern" in layout_text
+    assert "missing play patterns (0) are shown as a separate category" in (
+        layout_text
     )
 
 
@@ -571,5 +586,7 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b".sankey-toggle" in response.data
     assert b".conversion-chart" in response.data
     assert b".conversion-card .visualization-heading" in response.data
+    assert b".play-pattern-chart" in response.data
+    assert b".play-pattern-method-note" in response.data
     assert b".dashboard-dropdown.is-focused .Select-control" in response.data
     assert b".VirtualizedSelectSelectedOption" in response.data
