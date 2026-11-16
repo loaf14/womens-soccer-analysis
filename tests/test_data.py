@@ -8,6 +8,66 @@ from soccer_dashboard.storage import load_local_shots
 
 
 @pytest.fixture
+def dashboard_shots():
+    return pd.DataFrame(
+        [
+            {
+                "competition_name": "NWSL",
+                "season_name": "2023",
+                "match_id": 1,
+                "team": "NWSL United",
+                "shot_outcome": "Goal",
+                "shot_type": "Open Play",
+            },
+            {
+                "competition_name": "NWSL",
+                "season_name": "2023",
+                "match_id": 1,
+                "team": "NWSL City",
+                "shot_outcome": "Saved",
+                "shot_type": "Corner",
+            },
+            {
+                "competition_name": "NWSL",
+                "season_name": "2023",
+                "match_id": 2,
+                "team": "NWSL United",
+                "shot_outcome": "Blocked",
+                "shot_type": "Penalty",
+            },
+            {
+                "competition_name": "FA Women's Super League",
+                "season_name": "2023/2024",
+                "match_id": 1,
+                "team": "London WFC",
+                "shot_outcome": "Goal",
+                "shot_type": "Free Kick",
+            },
+            {
+                "competition_name": "FA Women's Super League",
+                "season_name": "2023/2024",
+                "match_id": 2,
+                "team": "London WFC",
+                "shot_outcome": "Off T",
+                "shot_type": "Open Play",
+            },
+        ]
+    )
+
+
+def _components_by_id(node):
+    if isinstance(node, dict):
+        props = node.get("props", {})
+        if "id" in props:
+            yield props["id"], props
+        for value in node.values():
+            yield from _components_by_id(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _components_by_id(value)
+
+
+@pytest.fixture
 def statsbomb_responses(monkeypatch):
     competitions = pd.DataFrame(
         [
@@ -211,11 +271,64 @@ def test_load_local_shots_explains_how_to_generate_missing_data(tmp_path):
         load_local_shots(tmp_path / "missing.parquet")
 
 
-def test_dash_layout_renders_unfiltered_total():
-    app = create_app(pd.DataFrame(index=range(7059)))
+def test_dash_layout_renders_dashboard_and_data_source(dashboard_shots):
+    app = create_app(dashboard_shots)
 
     response = app.server.test_client().get("/_dash-layout")
 
     assert response.status_code == 200
-    assert b"7,059" in response.data
+    assert b"The Anatomy of a Goal" in response.data
     assert b"StatsBomb Open Data" in response.data
+
+
+def test_dashboard_metrics_use_goals_and_competition_match_pairs(dashboard_shots):
+    app = create_app(dashboard_shots)
+    response = app.server.test_client().get("/_dash-layout")
+    components = dict(_components_by_id(response.get_json()))
+
+    assert components["total-shot-count"]["children"] == "5"
+    assert components["total-goal-count"]["children"] == "2"
+    assert components["shot-conversion-rate"]["children"] == "40.0%"
+    assert components["match-count"]["children"] == "4"
+
+
+def test_dashboard_filters_use_available_dataset_values(dashboard_shots):
+    app = create_app(dashboard_shots)
+    response = app.server.test_client().get("/_dash-layout")
+    components = dict(_components_by_id(response.get_json()))
+
+    competition_options = components["competition-filter"]["options"]
+    assert [(option["label"], option["value"]) for option in competition_options] == [
+        ("Both leagues", "all"),
+        ("NWSL", "nwsl"),
+        ("WSL", "wsl"),
+    ]
+
+    for component_id, expected in {
+        "team-filter": {"all", "London WFC", "NWSL City", "NWSL United"},
+        "shot-outcome-filter": {"all", "Blocked", "Goal", "Off T", "Saved"},
+        "shot-type-filter": {"all", "Corner", "Free Kick", "Open Play", "Penalty"},
+    }.items():
+        assert {option["value"] for option in components[component_id]["options"]} == expected
+
+
+def test_dashboard_has_all_four_visualization_placeholders(dashboard_shots):
+    app = create_app(dashboard_shots)
+    response = app.server.test_client().get("/_dash-layout")
+    components = dict(_components_by_id(response.get_json()))
+
+    assert {
+        "shot-map-placeholder",
+        "sankey-placeholder",
+        "shot-conversion-placeholder",
+        "shot-characteristics-placeholder",
+    }.issubset(components)
+
+
+def test_dashboard_stylesheet_is_served(dashboard_shots):
+    app = create_app(dashboard_shots)
+
+    response = app.server.test_client().get("/assets/dashboard.css")
+
+    assert response.status_code == 200
+    assert b"--color-page: #0b1110" in response.data
