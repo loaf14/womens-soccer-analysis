@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "womens-soccer-analysis"
+version = "0.1.0"
+description = "Women's soccer analytics dashboard built with Plotly and Dash"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dash>=2.18,<4",
+    "pandas>=2.2,<4",
+    "plotly>=5.24,<7",
+    "statsbombpy>=1.13,<2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[tool.setuptools.packages.find]
+include = ["soccer_dashboard*"]
