@@ -16,45 +16,60 @@ def dashboard_shots():
                 "season_name": "2023",
                 "match_id": 1,
                 "location": [110.0, 40.0],
+                "in_box": True,
                 "team": "NWSL United",
                 "shot_outcome": "Goal",
                 "shot_type": "Open Play",
+                "play_pattern": "Regular Play",
+                "shot_body_part": "Right Foot",
             },
             {
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 1,
                 "location": [102.0, 18.0],
+                "in_box": True,
                 "team": "NWSL City",
                 "shot_outcome": "Saved",
                 "shot_type": "Corner",
+                "play_pattern": "From Corner",
+                "shot_body_part": "Left Foot",
             },
             {
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 2,
                 "location": [45.0, 40.0],
+                "in_box": False,
                 "team": "NWSL United",
                 "shot_outcome": "Blocked",
                 "shot_type": "Penalty",
+                "play_pattern": "Regular Play",
+                "shot_body_part": "Head",
             },
             {
                 "competition_name": "FA Women's Super League",
                 "season_name": "2023/2024",
                 "match_id": 1,
                 "location": [115.0, 40.0],
+                "in_box": True,
                 "team": "London WFC",
                 "shot_outcome": "Goal",
                 "shot_type": "Free Kick",
+                "play_pattern": "From Free Kick",
+                "shot_body_part": "Right Foot",
             },
             {
                 "competition_name": "FA Women's Super League",
                 "season_name": "2023/2024",
                 "match_id": 2,
                 "location": [60.0, 0.0],
+                "in_box": False,
                 "team": "London WFC",
                 "shot_outcome": "Off T",
                 "shot_type": "Open Play",
+                "play_pattern": "Regular Play",
+                "shot_body_part": "Head",
             },
         ]
     )
@@ -339,17 +354,22 @@ def test_dashboard_filters_use_available_dataset_values(dashboard_shots):
         assert {option["value"] for option in components[component_id]["options"]} == expected
 
 
-def test_dashboard_has_all_four_visualization_placeholders(dashboard_shots):
+def test_dashboard_has_all_visualizations(dashboard_shots):
     app = create_app(dashboard_shots)
     response = app.server.test_client().get("/_dash-layout")
     components = dict(_components_by_id(response.get_json()))
 
     assert {
-        "sankey-placeholder",
         "shot-conversion-placeholder",
         "shot-characteristics-placeholder",
     }.issubset(components)
+    assert "sankey-graph" in components
     assert "shot-map-graph" in components
+    sankey_figure = components["sankey-graph"]["figure"]
+    assert sankey_figure["data"][0]["type"] == "sankey"
+    assert sum(sankey_figure["data"][0]["link"]["value"]) == 3 * len(
+        dashboard_shots
+    )
     assert components["shot-map-view"]["value"] == "hybrid"
     assert {
         option["value"] for option in components["shot-map-view"]["options"]
@@ -428,7 +448,7 @@ def test_season_chips_are_valid_direct_header_children(dashboard_shots):
     ) == 1
 
 
-def test_sankey_placeholder_copy_describes_categories_not_a_timeline(
+def test_sankey_copy_describes_categorical_associations_and_denominator(
     dashboard_shots,
 ):
     app = create_app(dashboard_shots)
@@ -436,6 +456,8 @@ def test_sankey_placeholder_copy_describes_categories_not_a_timeline(
 
     assert "How shot characteristics connect" in layout
     assert "play pattern, shot location, body part, and outcome" in layout
+    assert "percentages are shares of the source category" in layout
+    assert "categories below 1% are grouped as Other" in layout
     assert "actions leading to a shot" not in layout
     assert "How attacks unfold" not in layout
 
@@ -447,5 +469,6 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
 
     assert response.status_code == 200
     assert b"--color-page: #0b1110" in response.data
+    assert b".sankey-graph" in response.data
     assert b".dashboard-dropdown.is-focused .Select-control" in response.data
     assert b".VirtualizedSelectSelectedOption" in response.data

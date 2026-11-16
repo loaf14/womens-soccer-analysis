@@ -383,8 +383,15 @@ a {
   min-height: 260px;
 }
 
-.sankey-card .visualization-placeholder {
-  min-height: 330px;
+.sankey-graph {
+  width: 100%;
+  min-width: 0;
+}
+
+.sankey-graph .js-plotly-plot,
+.sankey-graph .plot-container,
+.sankey-graph .svg-container {
+  width: 100% !important;
 }
 
 .shot-map-card {

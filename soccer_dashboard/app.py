@@ -5,6 +5,7 @@ from pathlib import Path
 import pandas as pd
 from dash import Dash, Input, Output, dcc, html
 
+from soccer_dashboard.sankey import create_sankey_figure
 from soccer_dashboard.shot_map import create_shot_map, prepare_shot_coordinates
 from soccer_dashboard.storage import load_local_shots
 
@@ -362,17 +363,40 @@ def create_app(shots: pd.DataFrame) -> Dash:
             ),
             html.Section(
                 [
-                    html.P(
-                        "02  /  SHOT ASSOCIATIONS",
-                        className="section-kicker",
+                    html.Div(
+                        [
+                            html.P(
+                                "02  /  SHOT ASSOCIATIONS",
+                                className="section-kicker",
+                            ),
+                            html.H2(
+                                "How shot characteristics connect",
+                                className="section-title",
+                            ),
+                            html.P(
+                                "Categorical associations across play pattern, "
+                                "shot location, body part, and outcome. Links "
+                                "count shots; hover percentages are shares of "
+                                "the source category, not a timeline. Body-part "
+                                "categories below 1% are grouped as Other.",
+                                className="section-subtitle",
+                            ),
+                        ],
+                        className="section-heading",
                     ),
-                    _chart_placeholder(
-                        "How shot characteristics connect",
-                        "Explore associations among play pattern, shot location, "
-                        "body part, and outcome.",
-                        "sankey-placeholder",
-                        "PHASE 04",
-                        "sankey-card",
+                    html.Section(
+                        [
+                            dcc.Graph(
+                                id="sankey-graph",
+                                figure=create_sankey_figure(shots),
+                                config={
+                                    "displayModeBar": False,
+                                    "responsive": True,
+                                },
+                                className="sankey-graph",
+                            ),
+                        ],
+                        className="visualization-card sankey-card",
                     ),
                 ],
                 className="dashboard-section",
