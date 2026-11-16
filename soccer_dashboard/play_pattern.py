@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from html import escape
 import math
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 _COMPETITIONS = {
     "NWSL": "NWSL",
@@ -113,12 +113,21 @@ def create_play_pattern_figure(shots: pd.DataFrame) -> go.Figure:
     axis_maximum = min(
         100, max(tick_step, math.ceil(maximum_percentage / tick_step) * tick_step)
     )
-    tick_values = list(range(-axis_maximum, axis_maximum + tick_step, tick_step))
+    percentage_ticks = list(range(0, axis_maximum + tick_step, tick_step))
 
-    figure = go.Figure()
-    for league in _LEAGUES:
+    figure = make_subplots(
+        rows=1,
+        cols=3,
+        shared_yaxes=True,
+        column_widths=[0.30, 0.40, 0.30],
+        horizontal_spacing=0,
+        specs=[[{"type": "xy"}, {"type": "xy"}, {"type": "xy"}]],
+    )
+    for league, column, direction in (
+        ("NWSL", 1, -1),
+        ("WSL", 3, 1),
+    ):
         league_rows = summary.loc[summary["league"].eq(league)]
-        direction = -1 if league == "NWSL" else 1
         figure.add_trace(
             go.Bar(
                 x=league_rows["percentage"] * direction,
@@ -137,22 +146,24 @@ def create_play_pattern_figure(shots: pd.DataFrame) -> go.Figure:
                     "Share of league shots: %{customdata[1]:.2f}%"
                     "<extra></extra>"
                 ),
-            )
+            ),
+            row=1,
+            col=column,
         )
 
     annotations = [
         {
-            "x": 0,
+            "x": 0.5,
             "y": pattern,
-            "xref": "x",
+            "xref": "paper",
             "yref": "y",
-            "text": escape(pattern),
+            "text": pattern,
             "showarrow": False,
             "xanchor": "center",
             "align": "center",
-            "width": 150,
+            "width": 180,
             "bgcolor": "#111a17",
-            "borderpad": 3,
+            "borderpad": 2,
             "font": {"color": "#f0f3ed", "size": 11},
         }
         for pattern in categories
@@ -163,21 +174,54 @@ def create_play_pattern_figure(shots: pd.DataFrame) -> go.Figure:
         paper_bgcolor="#111a17",
         plot_bgcolor="#111a17",
         font={"family": "DM Sans, Segoe UI, sans-serif", "color": "#f0f3ed"},
-        margin={"l": 16, "r": 16, "t": 58, "b": 48},
+        margin={"l": 8, "r": 8, "t": 58, "b": 48},
         height=height,
         autosize=True,
         barmode="overlay",
         bargap=0.28,
         xaxis={
-            "title": "Share of each league's shots",
-            "range": [-axis_maximum, axis_maximum],
+            "title": None,
+            "range": [-axis_maximum, 0],
             "tickmode": "array",
-            "tickvals": tick_values,
-            "ticktext": [f"{abs(value)}%" if value else "" for value in tick_values],
+            "tickvals": [-value for value in percentage_ticks],
+            "ticktext": [f"{value}%" for value in percentage_ticks],
             "gridcolor": "rgba(154,168,158,0.14)",
             "zeroline": False,
+            "side": "bottom",
+        },
+        xaxis2={
+            "visible": False,
+            "range": [0, 1],
+            "showgrid": False,
+            "zeroline": False,
+        },
+        xaxis3={
+            "title": None,
+            "range": [0, axis_maximum],
+            "tickmode": "array",
+            "tickvals": percentage_ticks,
+            "ticktext": [f"{value}%" for value in percentage_ticks],
+            "gridcolor": "rgba(154,168,158,0.14)",
+            "zeroline": False,
+            "side": "bottom",
         },
         yaxis={
+            "categoryorder": "array",
+            "categoryarray": categories,
+            "autorange": "reversed",
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+        },
+        yaxis2={
+            "categoryorder": "array",
+            "categoryarray": categories,
+            "autorange": "reversed",
+            "showticklabels": False,
+            "showgrid": False,
+            "zeroline": False,
+        },
+        yaxis3={
             "categoryorder": "array",
             "categoryarray": categories,
             "autorange": "reversed",
@@ -192,7 +236,19 @@ def create_play_pattern_figure(shots: pd.DataFrame) -> go.Figure:
             "xanchor": "center",
             "x": 0.5,
         },
-        annotations=annotations,
+        annotations=[
+            *annotations,
+            {
+                "x": 0.5,
+                "y": -0.16,
+                "xref": "paper",
+                "yref": "paper",
+                "text": "Share of each league's shots",
+                "showarrow": False,
+                "xanchor": "center",
+                "font": {"color": "#f0f3ed", "size": 12},
+            },
+        ],
         hoverlabel={"bgcolor": "#17231e", "font": {"color": "#f0f3ed"}},
     )
     return figure

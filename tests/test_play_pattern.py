@@ -91,9 +91,11 @@ def test_all_patterns_are_ordered_by_combined_frequency(play_pattern_shots):
 
     assert summary["play_pattern"].drop_duplicates().tolist() == expected_order
     assert list(figure.layout.yaxis.categoryarray) == expected_order
-    assert [annotation.text for annotation in figure.layout.annotations] == (
-        expected_order
-    )
+    labels = list(figure.layout.annotations[: len(expected_order)])
+    assert [annotation.text for annotation in labels] == expected_order
+    assert all(annotation.x == 0.5 for annotation in labels)
+    assert all(annotation.xref == "paper" for annotation in labels)
+    assert all(annotation.yref == "y" for annotation in labels)
 
 
 def test_chart_uses_a_symmetric_percentage_scale_and_complete_hover_data(
@@ -107,10 +109,33 @@ def test_chart_uses_a_symmetric_percentage_scale_and_complete_hover_data(
     assert list(wsl.x) == pytest.approx([100 / 3, 200 / 3, 0])
     assert all(value <= 0 for value in nws.x)
     assert all(value >= 0 for value in wsl.x)
-    assert tuple(figure.layout.xaxis.range) == (
-        -figure.layout.xaxis.range[1],
-        figure.layout.xaxis.range[1],
+    assert figure.layout.xaxis.range == (-figure.layout.xaxis3.range[1], 0)
+    assert figure.layout.xaxis3.range[0] == 0
+    assert figure.layout.xaxis.range[0] == -figure.layout.xaxis3.range[1]
+    assert list(figure.layout.xaxis.ticktext) == list(figure.layout.xaxis3.ticktext)
+    assert list(figure.layout.xaxis.tickvals) == [
+        -value for value in figure.layout.xaxis3.tickvals
+    ]
+    assert figure.layout.xaxis2.visible is False
+    assert figure.layout.xaxis2.showgrid is False
+    assert figure.layout.xaxis.domain[1] == pytest.approx(
+        figure.layout.xaxis2.domain[0]
     )
+    assert figure.layout.xaxis2.domain[1] == pytest.approx(
+        figure.layout.xaxis3.domain[0]
+    )
+    assert figure.layout.xaxis2.domain[1] > figure.layout.xaxis2.domain[0]
+    assert figure.layout.xaxis2.domain[1] - figure.layout.xaxis2.domain[0] == (
+        pytest.approx(0.4)
+    )
+    assert figure.layout.xaxis.domain[1] - figure.layout.xaxis.domain[0] == (
+        pytest.approx(0.3)
+    )
+    assert figure.layout.xaxis3.domain[1] - figure.layout.xaxis3.domain[0] == (
+        pytest.approx(0.3)
+    )
+    assert nws.xaxis == "x"
+    assert wsl.xaxis == "x3"
     assert "League: NWSL" in nws.hovertemplate
     assert "Play pattern: %{y}" in nws.hovertemplate
     assert "Shots: %{customdata[0]:,.0f}" in nws.hovertemplate
@@ -150,8 +175,9 @@ def test_tick_scale_stays_symmetric_above_eighty_percent():
     )
 
     figure = create_play_pattern_figure(shots)
-    tick_values = list(figure.layout.xaxis.tickvals)
+    tick_values = list(figure.layout.xaxis3.tickvals)
 
     assert tick_values == sorted(tick_values)
-    assert tick_values == [-value for value in reversed(tick_values)]
-    assert figure.layout.xaxis.range == (-100, 100)
+    assert list(figure.layout.xaxis.tickvals) == [-value for value in tick_values]
+    assert figure.layout.xaxis.range == (-100, 0)
+    assert figure.layout.xaxis3.range == (0, 100)
