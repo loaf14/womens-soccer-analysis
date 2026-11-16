@@ -46,10 +46,23 @@ def _sankey(figure):
     return figure.data[0]
 
 
-def _link_count(trace, source_label, target_label):
+def _node_index(trace, stage, label):
     labels = list(trace.node.label)
-    source_index = labels.index(source_label)
-    target_index = labels.index(target_label)
+    stages = list(trace.node.customdata)
+    matches = [
+        index
+        for index, (node_stage, node_label) in enumerate(
+            zip(stages, labels, strict=True)
+        )
+        if node_stage == stage and node_label == label
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _link_count(trace, source_stage, source_label, target_stage, target_label):
+    source_index = _node_index(trace, source_stage, source_label)
+    target_index = _node_index(trace, target_stage, target_label)
     return sum(
         value
         for source, target, value in zip(
@@ -66,9 +79,8 @@ def test_sankey_aggregates_categories_and_uses_source_category_percentages(
     sankey_shots,
 ):
     trace = _sankey(create_sankey_figure(sankey_shots))
-    labels = list(trace.node.label)
-    regular_play = labels.index("Regular Play")
-    inside_box = labels.index("Inside box")
+    regular_play = _node_index(trace, "Play pattern", "Regular Play")
+    inside_box = _node_index(trace, "Shot location", "Inside box")
     link_index = next(
         index
         for index, (source, target) in enumerate(
@@ -77,7 +89,16 @@ def test_sankey_aggregates_categories_and_uses_source_category_percentages(
         if source == regular_play and target == inside_box
     )
 
-    assert _link_count(trace, "Regular Play", "Inside box") == 2
+    assert (
+        _link_count(
+            trace,
+            "Play pattern",
+            "Regular Play",
+            "Shot location",
+            "Inside box",
+        )
+        == 2
+    )
     assert trace.link.value[link_index] == 2
     assert list(trace.link.customdata[link_index]) == [
         "Regular Play",
@@ -91,64 +112,92 @@ def test_sankey_aggregates_categories_and_uses_source_category_percentages(
 
 def test_each_shot_contributes_once_to_every_adjacent_stage(sankey_shots):
     trace = _sankey(create_sankey_figure(sankey_shots))
-    categories = {
-        "play_pattern": sankey_shots["play_pattern"].fillna("Unknown").nunique(),
-        "shot_location": 3,
-        "body_part": sankey_shots["shot_body_part"].fillna("Unknown").nunique(),
-        "outcome": 2,
-    }
-    stage_starts = {}
-    offset = 0
-    for column, count in categories.items():
-        stage_starts[column] = (offset, offset + count)
-        offset += count
+    transitions = [
+        ("Play pattern", "Shot location"),
+        ("Shot location", "Body part"),
+        ("Body part", "Outcome"),
+    ]
 
-    for source_column, target_column in zip(
-        list(categories)[:-1], list(categories)[1:], strict=True
-    ):
-        start, end = stage_starts[source_column]
+    for source_stage, target_stage in transitions:
         stage_total = sum(
             value
-            for source, value in zip(
-                trace.link.source, trace.link.value, strict=True
+            for source, target, value in zip(
+                trace.link.source,
+                trace.link.target,
+                trace.link.value,
+                strict=True,
             )
-            if start <= source < end
+            if trace.node.customdata[source] == source_stage
+            and trace.node.customdata[target] == target_stage
         )
         assert stage_total == len(sankey_shots)
 
     assert sum(trace.link.value) == 3 * len(sankey_shots)
 
 
-def test_missing_categories_are_explicit_and_missing_outcomes_are_non_goals(
+def test_missing_categories_are_explicit_and_missing_outcomes_are_unknown(
     sankey_shots,
 ):
     trace = _sankey(create_sankey_figure(sankey_shots))
     labels = list(trace.node.label)
-    unknown_indices = [index for index, label in enumerate(labels) if label == "Unknown"]
+    stages = list(trace.node.customdata)
 
-    assert labels.count("Unknown") == 3
-    assert "Non-goal" in labels
-    assert "Goal" in labels
-    assert sum(
-        value
-        for source, target, value in zip(
-            trace.link.source,
-            trace.link.target,
-            trace.link.value,
-            strict=True,
+    assert sum(label == "Unknown" for label in labels) == 4
+    assert ("Outcome", "Unknown") in list(zip(stages, labels, strict=True))
+    assert ("Outcome", "Non-goal") in list(zip(stages, labels, strict=True))
+    assert ("Outcome", "Goal") in list(zip(stages, labels, strict=True))
+    assert _link_count(trace, "Body part", "Unknown", "Outcome", "Unknown") == 1
+    assert _link_count(trace, "Body part", "Unknown", "Outcome", "Non-goal") == 0
+
+
+def test_missing_and_blank_outcomes_are_unknown_not_non_goals():
+    shots = pd.DataFrame(
+        {
+            "play_pattern": ["Regular Play"] * 7,
+            "in_box": [True] * 7,
+            "shot_body_part": ["Right Foot"] * 7,
+            "shot_outcome": [
+                None,
+                pd.NA,
+                "",
+                "   ",
+                "Goal",
+                "Saved",
+                "Unknown",
+            ],
+        }
+    )
+    trace = _sankey(create_sankey_figure(shots))
+    outcome_nodes = [
+        label
+        for stage, label in zip(
+            trace.node.customdata, trace.node.label, strict=True
         )
-        if source == unknown_indices[0] and target == unknown_indices[1]
-    ) == 1
-    assert sum(
-        value
-        for source, target, value in zip(
-            trace.link.source,
-            trace.link.target,
-            trace.link.value,
-            strict=True,
-        )
-        if source == unknown_indices[2] and target == labels.index("Non-goal")
-    ) == 1
+        if stage == "Outcome"
+    ]
+
+    assert outcome_nodes == ["Goal", "Non-goal", "Unknown"]
+    assert _link_count(trace, "Body part", "Right Foot", "Outcome", "Unknown") == 4
+    assert _link_count(trace, "Body part", "Right Foot", "Outcome", "Goal") == 1
+    assert _link_count(trace, "Body part", "Right Foot", "Outcome", "Non-goal") == 2
+
+    for source_stage, target_stage in [
+        ("Play pattern", "Shot location"),
+        ("Shot location", "Body part"),
+        ("Body part", "Outcome"),
+    ]:
+        assert sum(
+            value
+            for source, target, value in zip(
+                trace.link.source,
+                trace.link.target,
+                trace.link.value,
+                strict=True,
+            )
+            if trace.node.customdata[source] == source_stage
+            and trace.node.customdata[target] == target_stage
+        ) == len(shots)
+    assert sum(trace.link.value) == 3 * len(shots)
 
 
 def test_rare_body_parts_are_grouped_as_other():

@@ -378,7 +378,8 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 "shot location, body part, and outcome. Links "
                                 "count shots; hover percentages are shares of "
                                 "the source category, not a timeline. Body-part "
-                                "categories below 1% are grouped as Other.",
+                                "categories below 1% are grouped as Other. "
+                                "Missing shot outcomes are shown as Unknown.",
                                 className="section-subtitle",
                             ),
                         ],

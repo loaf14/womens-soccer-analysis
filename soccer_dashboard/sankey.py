@@ -29,6 +29,15 @@ def _category_label(value: object) -> str:
     return label or "Unknown"
 
 
+def _outcome_category(value: object) -> str:
+    if value is None or pd.isna(value):
+        return "Unknown"
+    outcome = str(value).strip()
+    if not outcome:
+        return "Unknown"
+    return "Goal" if outcome == "Goal" else "Non-goal"
+
+
 def _prepare_categories(shots: pd.DataFrame) -> pd.DataFrame:
     missing_columns = _REQUIRED_COLUMNS.difference(shots.columns)
     if missing_columns:
@@ -60,18 +69,14 @@ def _prepare_categories(shots: pd.DataFrame) -> pd.DataFrame:
         }
         body_parts = body_parts.mask(body_parts.isin(rare_parts), "Other")
     categories["body_part"] = body_parts
-    categories["outcome"] = shots["shot_outcome"].map(
-        lambda value: (
-            "Goal" if isinstance(value, str) and value == "Goal" else "Non-goal"
-        )
-    )
+    categories["outcome"] = shots["shot_outcome"].map(_outcome_category)
     return categories
 
 
 def _stage_labels(categories: pd.DataFrame, column: str) -> list[str]:
     counts = categories[column].value_counts()
     if column == "outcome":
-        preferred = ["Goal", "Non-goal"]
+        preferred = ["Goal", "Non-goal", "Unknown"]
         return [label for label in preferred if label in counts.index]
     if column == "shot_location":
         preferred = ["Inside box", "Outside box", "Unknown"]
@@ -83,19 +88,22 @@ def create_sankey_figure(shots: pd.DataFrame) -> go.Figure:
     """Create links whose widths are shot counts for adjacent category stages.
 
     Link hover percentages use the total shots leaving that link's source
-    category as their denominator. Missing category values are shown as
-    ``Unknown``; missing shot outcomes are grouped with non-goals.
+    category as their denominator. Missing or blank values are shown as
+    ``Unknown``; only the ``Goal`` outcome is classified as a goal, and other
+    valid outcomes are grouped as ``Non-goal``.
     """
     categories = _prepare_categories(shots)
     node_labels: list[str] = []
+    node_stages: list[str] = []
     node_colors: list[str] = []
     node_index: dict[tuple[str, str], int] = {}
     source_totals: dict[tuple[str, str], int] = {}
 
-    for (column, _), color in zip(_STAGES, _STAGE_COLORS, strict=True):
+    for (column, stage_label), color in zip(_STAGES, _STAGE_COLORS, strict=True):
         for label in _stage_labels(categories, column):
             node_index[(column, label)] = len(node_labels)
             node_labels.append(label)
+            node_stages.append(stage_label)
             node_colors.append(color)
             source_totals[(column, label)] = int(categories[column].eq(label).sum())
 
@@ -137,11 +145,14 @@ def create_sankey_figure(shots: pd.DataFrame) -> go.Figure:
             arrangement="snap",
             node={
                 "label": node_labels,
+                "customdata": node_stages,
                 "color": node_colors,
                 "pad": 18,
                 "thickness": 18,
                 "line": {"color": "rgba(220,230,221,0.26)", "width": 0.6},
-                "hovertemplate": "Category: %{label}<extra></extra>",
+                "hovertemplate": (
+                    "Stage: %{customdata}<br>Category: %{label}<extra></extra>"
+                ),
             },
             link={
                 "source": link_sources,

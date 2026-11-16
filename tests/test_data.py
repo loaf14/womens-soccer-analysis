@@ -458,6 +458,7 @@ def test_sankey_copy_describes_categorical_associations_and_denominator(
     assert "play pattern, shot location, body part, and outcome" in layout
     assert "percentages are shares of the source category" in layout
     assert "categories below 1% are grouped as Other" in layout
+    assert "Missing shot outcomes are shown as Unknown" in layout
     assert "actions leading to a shot" not in layout
     assert "How attacks unfold" not in layout
 
