@@ -148,16 +148,40 @@ def test_heatmap_uses_every_valid_shot_in_attacking_half_and_documented_bins(
     figure = create_shot_map(shot_map_shots, mode="heatmap")
     density = _trace_by_name(figure, "Shot frequency")
 
-    assert density.type == "histogram2d"
-    assert len(density.x) == len(density.y) == 3
-    assert density.xbins.size == DENSITY_BIN_SIZE
-    assert density.ybins.size == DENSITY_BIN_SIZE
-    assert list(density.x) == [0.0, -22.0, -40.0]
-    assert list(density.y) == [48.0, 42.0, 0.0]
+    assert density.type == "heatmap"
+    assert len(density.x) == 2 * 40 / DENSITY_BIN_SIZE
+    assert len(density.y) == 60 / DENSITY_BIN_SIZE
+    assert len(density.z) == len(density.y)
+    assert len(density.z[0]) == len(density.x)
     assert density.colorbar.title.text == "Shot attempts per bin"
     assert len(density.colorscale) > 1
-    assert int(shot_map_shots["shot_outcome"].eq("Goal").sum()) == 2
-    assert len(density.x) == 3
+    assert sum(map(sum, density.z)) == 3
+
+
+@pytest.mark.parametrize("mode", ["heatmap", "hybrid"])
+def test_density_bin_counts_conserve_attacking_half_shots_at_all_boundaries(mode):
+    shots = pd.DataFrame(
+        {
+            "location": [
+                [60.0, 0.0],
+                [60.0, 80.0],
+                [120.0, 0.0],
+                [120.0, 80.0],
+                [108.0, 40.0],
+                [45.0, 40.0],
+                None,
+            ],
+            "shot_outcome": ["Saved", "Saved", "Saved", "Goal", "Blocked", "Saved", "Saved"],
+        }
+    )
+    expected_count = int(prepare_shot_coordinates(shots)["in_attacking_half"].sum())
+    density = _trace_by_name(create_shot_map(shots, mode=mode), "Shot frequency")
+
+    assert sum(map(sum, density.z)) == expected_count == 5
+    assert density.z[0][0] == 1
+    assert density.z[0][-1] == 1
+    assert density.z[-1][0] == 1
+    assert density.z[-1][-1] == 1
 
 
 def test_hybrid_uses_same_all_shot_density_and_adds_only_goals(shot_map_shots):
@@ -167,8 +191,9 @@ def test_hybrid_uses_same_all_shot_density_and_adds_only_goals(shot_map_shots):
     hybrid_density = _trace_by_name(hybrid, "Shot frequency")
     goals = _trace_by_name(hybrid, "Goals")
 
-    assert list(hybrid_density.x) == list(heatmap_density.x)
-    assert list(hybrid_density.y) == list(heatmap_density.y)
+    assert [list(row) for row in hybrid_density.z] == [
+        list(row) for row in heatmap_density.z
+    ]
     assert len(goals.x) == 2
     assert "Non-goals" not in {trace.name for trace in hybrid.data}
     assert list(hybrid.data).index(hybrid_density) < list(hybrid.data).index(goals)
@@ -207,7 +232,7 @@ def test_empty_shots_produce_valid_empty_figures(mode):
 
     assert figure.layout.shapes
     if mode in {"heatmap", "hybrid"}:
-        assert len(_trace_by_name(figure, "Shot frequency").x) == 0
+        assert sum(map(sum, _trace_by_name(figure, "Shot frequency").z)) == 0
     if mode in {"individual", "hybrid"}:
         assert len(_trace_by_name(figure, "Goals").x) == 0
 

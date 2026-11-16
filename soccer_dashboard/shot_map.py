@@ -229,12 +229,33 @@ _SHOT_HOVER_TEMPLATE = (
 
 
 def _add_density(fig: go.Figure, shots: pd.DataFrame) -> None:
+    x_start = -HALF_PITCH_WIDTH / 2
+    x_bin_count = int(HALF_PITCH_WIDTH / DENSITY_BIN_SIZE)
+    y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
+    counts = [[0] * y_bin_count for _ in range(x_bin_count)]
+    for x, y in zip(shots["map_x"], shots["map_y"], strict=True):
+        # Clamp the maximum pitch edges into the final bins.
+        x_bin = min(int((x - x_start) / DENSITY_BIN_SIZE), x_bin_count - 1)
+        y_bin = min(int(y / DENSITY_BIN_SIZE), y_bin_count - 1)
+        counts[x_bin][y_bin] += 1
+
+    x_centers = [
+        x_start + (index + 0.5) * DENSITY_BIN_SIZE
+        for index in range(x_bin_count)
+    ]
+    y_centers = [
+        (index + 0.5) * DENSITY_BIN_SIZE for index in range(y_bin_count)
+    ]
+    z_values = [
+        [counts[x_index][y_index] for x_index in range(x_bin_count)]
+        for y_index in range(y_bin_count)
+    ]
+
     fig.add_trace(
-        go.Histogram2d(
-            x=shots["map_x"].tolist(),
-            y=shots["map_y"].tolist(),
-            xbins={"start": -40, "end": 40, "size": DENSITY_BIN_SIZE},
-            ybins={"start": 0, "end": HALF_PITCH_LENGTH, "size": DENSITY_BIN_SIZE},
+        go.Heatmap(
+            x=x_centers,
+            y=y_centers,
+            z=z_values,
             colorscale=HEATMAP_COLORS,
             colorbar={
                 "title": {
@@ -248,6 +269,9 @@ def _add_density(fig: go.Figure, shots: pd.DataFrame) -> None:
                 "len": 0.72,
                 "bgcolor": "rgba(11,17,16,0.82)",
             },
+            zmin=0,
+            zmax=max(1, max(map(max, counts))),
+            hoverongaps=False,
             hovertemplate=(
                 "Shot attempts: %{z}<br>"
                 "Lateral position: %{x:.0f}<br>"
@@ -304,7 +328,8 @@ def create_shot_map(
     Valid shots with ``x < 60`` and shots with unavailable/invalid locations
     are not silently included or repositioned; the dashboard reports these
     counts in its coverage note. Density uses 4-by-4 coordinate-unit histogram
-    bins and represents shot frequency, not scoring probability.
+    bins and represents shot frequency, not scoring probability. The upper
+    pitch boundaries are included in the final bins.
     """
     if mode not in {"individual", "heatmap", "hybrid"}:
         raise ValueError(f"Unknown shot map mode: {mode!r}")

@@ -309,6 +309,16 @@ def test_shot_map_coverage_note_reports_outside_half_shots(dashboard_shots):
     assert "Shot locations unavailable or invalid: 0." in note
 
 
+def test_shot_map_section_copy_does_not_claim_outside_half_shots_are_plotted(
+    dashboard_shots,
+):
+    app = create_app(dashboard_shots)
+    layout = app.server.test_client().get("/_dash-layout").get_data(as_text=True)
+
+    assert "Compare shot locations and outcomes across both leagues." in layout
+    assert "every attempt across both leagues" not in layout
+
+
 def test_dashboard_filters_use_available_dataset_values(dashboard_shots):
     app = create_app(dashboard_shots)
     response = app.server.test_client().get("/_dash-layout")

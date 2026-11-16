@@ -276,8 +276,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                             html.P("01  /  SHOT LOCATION", className="section-kicker"),
                             html.H2("Where shots become goals", className="section-title"),
                             html.P(
-                                "Compare the location and outcome of every attempt "
-                                "across both leagues.",
+                                "Compare shot locations and outcomes across both leagues.",
                                 className="section-subtitle",
                             ),
                         ],
