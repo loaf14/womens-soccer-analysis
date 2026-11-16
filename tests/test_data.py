@@ -15,6 +15,7 @@ def dashboard_shots():
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 1,
+                "location": [110.0, 40.0],
                 "team": "NWSL United",
                 "shot_outcome": "Goal",
                 "shot_type": "Open Play",
@@ -23,6 +24,7 @@ def dashboard_shots():
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 1,
+                "location": [102.0, 18.0],
                 "team": "NWSL City",
                 "shot_outcome": "Saved",
                 "shot_type": "Corner",
@@ -31,6 +33,7 @@ def dashboard_shots():
                 "competition_name": "NWSL",
                 "season_name": "2023",
                 "match_id": 2,
+                "location": [45.0, 40.0],
                 "team": "NWSL United",
                 "shot_outcome": "Blocked",
                 "shot_type": "Penalty",
@@ -39,6 +42,7 @@ def dashboard_shots():
                 "competition_name": "FA Women's Super League",
                 "season_name": "2023/2024",
                 "match_id": 1,
+                "location": [115.0, 40.0],
                 "team": "London WFC",
                 "shot_outcome": "Goal",
                 "shot_type": "Free Kick",
@@ -47,6 +51,7 @@ def dashboard_shots():
                 "competition_name": "FA Women's Super League",
                 "season_name": "2023/2024",
                 "match_id": 2,
+                "location": [60.0, 0.0],
                 "team": "London WFC",
                 "shot_outcome": "Off T",
                 "shot_type": "Open Play",
@@ -292,6 +297,18 @@ def test_dashboard_metrics_use_goals_and_competition_match_pairs(dashboard_shots
     assert components["match-count"]["children"] == "4"
 
 
+def test_shot_map_coverage_note_reports_outside_half_shots(dashboard_shots):
+    app = create_app(dashboard_shots)
+    components = dict(
+        _components_by_id(app.server.test_client().get("/_dash-layout").get_json())
+    )
+
+    note = components["shot-map-coverage-note"]["children"]
+    assert "Valid shots outside the attacking half (x < 60): 1." in note
+    assert "These are not plotted in this half-pitch view." in note
+    assert "Shot locations unavailable or invalid: 0." in note
+
+
 def test_dashboard_filters_use_available_dataset_values(dashboard_shots):
     app = create_app(dashboard_shots)
     response = app.server.test_client().get("/_dash-layout")
@@ -318,11 +335,49 @@ def test_dashboard_has_all_four_visualization_placeholders(dashboard_shots):
     components = dict(_components_by_id(response.get_json()))
 
     assert {
-        "shot-map-placeholder",
         "sankey-placeholder",
         "shot-conversion-placeholder",
         "shot-characteristics-placeholder",
     }.issubset(components)
+    assert "shot-map-graph" in components
+    assert components["shot-map-view"]["value"] == "hybrid"
+    assert {
+        option["value"] for option in components["shot-map-view"]["options"]
+    } == {"individual", "heatmap", "hybrid"}
+
+
+@pytest.mark.parametrize(
+    ("mode", "expected_traces"),
+    [
+        ("individual", {"Goals", "Non-goals"}),
+        ("heatmap", {"Shot frequency"}),
+        ("hybrid", {"Shot frequency", "Goals"}),
+    ],
+)
+def test_shot_map_view_callback_switches_figure(
+    dashboard_shots, mode, expected_traces
+):
+    app = create_app(dashboard_shots)
+    response = app.server.test_client().post(
+        "/_dash-update-component",
+        json={
+            "output": "shot-map-graph.figure",
+            "outputs": {"id": "shot-map-graph", "property": "figure"},
+            "inputs": [
+                {"id": "shot-map-view", "property": "value", "value": mode}
+            ],
+            "state": [],
+            "changedPropIds": ["shot-map-view.value"],
+        },
+    )
+
+    assert response.status_code == 200
+    trace_names = {
+        trace["name"]
+        for trace in response.json["response"]["shot-map-graph"]["figure"]["data"]
+        if trace.get("name")
+    }
+    assert expected_traces.issubset(trace_names)
 
 
 def test_season_chips_are_valid_direct_header_children(dashboard_shots):

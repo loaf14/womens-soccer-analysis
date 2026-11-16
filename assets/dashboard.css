@@ -387,6 +387,101 @@ a {
   min-height: 330px;
 }
 
+.shot-map-card {
+  padding-bottom: 0.75rem;
+}
+
+.shot-map-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.map-view-control {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.map-view-label {
+  color: var(--color-muted);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+}
+
+.shot-map-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: #0c1411;
+}
+
+.shot-map-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 36px;
+  padding: 0.4rem 0.65rem;
+  border: 1px solid transparent;
+  border-radius: 0.45rem;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.shot-map-option:has(.shot-map-radio:checked) {
+  border-color: #3a6048;
+  background: #1b3023;
+  color: var(--color-text);
+}
+
+.shot-map-option:hover {
+  color: var(--color-text);
+}
+
+.shot-map-radio {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin: 0;
+  accent-color: var(--color-pitch);
+}
+
+.shot-map-radio:focus-visible {
+  outline: 2px solid var(--color-pitch);
+  outline-offset: 3px;
+}
+
+.map-coverage-note,
+.map-method-note {
+  margin: 0.9rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.map-method-note {
+  margin-top: 0.25rem;
+  color: var(--color-subtle);
+}
+
+.shot-map-graph {
+  min-width: 0;
+  margin-top: 0.5rem;
+}
+
+.shot-map-graph .js-plotly-plot,
+.shot-map-graph .plot-container,
+.shot-map-graph .svg-container {
+  width: 100% !important;
+}
+
 .dashboard-footer {
   display: flex;
   align-items: flex-end;
@@ -483,6 +578,27 @@ a {
 
   .visualization-heading {
     flex-direction: column;
+  }
+
+  .shot-map-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .map-view-control {
+    min-width: 0;
+  }
+
+  .shot-map-toggle {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .shot-map-option {
+    justify-content: center;
+    padding: 0.4rem;
+    font-size: 0.72rem;
   }
 
   .shot-map-card .visualization-placeholder,

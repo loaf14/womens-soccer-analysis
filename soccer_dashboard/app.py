@@ -3,8 +3,9 @@
 from pathlib import Path
 
 import pandas as pd
-from dash import Dash, dcc, html
+from dash import Dash, Input, Output, dcc, html
 
+from soccer_dashboard.shot_map import create_shot_map, prepare_shot_coordinates
 from soccer_dashboard.storage import load_local_shots
 
 COMPETITION_VALUES = {
@@ -96,6 +97,20 @@ def create_app(shots: pd.DataFrame) -> Dash:
     total_shots = len(shots)
     conversion_rate = goals / total_shots * 100 if total_shots else 0
     matches = int(shots.groupby(["competition_name", "match_id"]).ngroups)
+    map_shots = prepare_shot_coordinates(shots)
+    shots_outside_half = int(
+        (
+            map_shots["has_valid_location"]
+            & ~map_shots["in_attacking_half"]
+        ).sum()
+    )
+    shots_without_location = int((~map_shots["has_valid_location"]).sum())
+    map_coverage_note = (
+        "Half-pitch view: StatsBomb x=60–120, attacking toward the goal. "
+        f"Valid shots outside the attacking half (x < 60): {shots_outside_half:,}. "
+        "These are not plotted in this half-pitch view. "
+        f"Shot locations unavailable or invalid: {shots_without_location:,}."
+    )
 
     seasons = (
         shots[["competition_name", "season_name"]]
@@ -268,12 +283,80 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         ],
                         className="section-heading",
                     ),
-                    _chart_placeholder(
-                        "Interactive shot map",
-                        "Location, outcome, and attacking patterns",
-                        "shot-map-placeholder",
-                        "PHASE 03",
-                        "shot-map-card",
+                    html.Section(
+                        [
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.H2(
+                                                "Interactive shot map",
+                                                className="section-title",
+                                            ),
+                                            html.P(
+                                                "Shot location, outcome, and "
+                                                "attacking patterns.",
+                                                className="section-subtitle",
+                                            ),
+                                        ]
+                                    ),
+                                    html.Div(
+                                        [
+                                            html.Label(
+                                                "MAP VIEW",
+                                                htmlFor="shot-map-view",
+                                                className="map-view-label",
+                                            ),
+                                            dcc.RadioItems(
+                                                id="shot-map-view",
+                                                options=[
+                                                    {
+                                                        "label": "Hybrid",
+                                                        "value": "hybrid",
+                                                    },
+                                                    {
+                                                        "label": "Individual shots",
+                                                        "value": "individual",
+                                                    },
+                                                    {
+                                                        "label": "Heatmap",
+                                                        "value": "heatmap",
+                                                    },
+                                                ],
+                                                value="hybrid",
+                                                inline=True,
+                                                className="shot-map-toggle",
+                                                labelClassName="shot-map-option",
+                                                inputClassName="shot-map-radio",
+                                            ),
+                                        ],
+                                        className="map-view-control",
+                                    ),
+                                ],
+                                className="shot-map-toolbar",
+                            ),
+                            html.P(
+                                map_coverage_note,
+                                id="shot-map-coverage-note",
+                                className="map-coverage-note",
+                            ),
+                            html.P(
+                                "Heat intensity represents shot frequency, not "
+                                "scoring probability. Density bins are 4 × 4 "
+                                "StatsBomb coordinate units.",
+                                className="map-method-note",
+                            ),
+                            dcc.Graph(
+                                id="shot-map-graph",
+                                figure=create_shot_map(shots, mode="hybrid"),
+                                config={
+                                    "displayModeBar": False,
+                                    "responsive": True,
+                                },
+                                className="shot-map-graph",
+                            ),
+                        ],
+                        className="visualization-card shot-map-card",
                     ),
                 ],
                 className="dashboard-section",
@@ -281,7 +364,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
             html.Section(
                 [
                     html.P(
-                        "02  /  ATTACK SEQUENCE",
+                        "02  /  SHOT ASSOCIATIONS",
                         className="section-kicker",
                     ),
                     _chart_placeholder(
@@ -357,6 +440,14 @@ def create_app(shots: pd.DataFrame) -> Dash:
         ],
         className="dashboard-shell",
     )
+
+    @app.callback(
+        Output("shot-map-graph", "figure"),
+        Input("shot-map-view", "value"),
+    )
+    def update_shot_map(mode: str):
+        return create_shot_map(shots, mode=mode)
+
     return app
 
 
