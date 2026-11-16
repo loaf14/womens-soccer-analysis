@@ -357,15 +357,34 @@ def test_dashboard_has_all_four_visualization_placeholders(dashboard_shots):
 
 
 @pytest.mark.parametrize(
-    ("mode", "expected_traces"),
+    ("mode", "expected_traces", "expected_marker_counts", "expected_density_count"),
     [
-        ("individual", {"Goals", "Non-goals"}),
-        ("heatmap", {"Shot frequency"}),
-        ("hybrid", {"Shot frequency", "Goals"}),
+        (
+            "individual",
+            {"Penalty arc", "Corner arcs", "Goals", "Non-goals"},
+            {"Goals": 2, "Non-goals": 2},
+            None,
+        ),
+        (
+            "heatmap",
+            {"Shot frequency", "Penalty arc", "Corner arcs"},
+            {},
+            4,
+        ),
+        (
+            "hybrid",
+            {"Shot frequency", "Penalty arc", "Corner arcs", "Goals"},
+            {"Goals": 2},
+            4,
+        ),
     ],
 )
 def test_shot_map_view_callback_switches_figure(
-    dashboard_shots, mode, expected_traces
+    dashboard_shots,
+    mode,
+    expected_traces,
+    expected_marker_counts,
+    expected_density_count,
 ):
     app = create_app(dashboard_shots)
     response = app.server.test_client().post(
@@ -382,12 +401,15 @@ def test_shot_map_view_callback_switches_figure(
     )
 
     assert response.status_code == 200
-    trace_names = {
-        trace["name"]
-        for trace in response.json["response"]["shot-map-graph"]["figure"]["data"]
-        if trace.get("name")
-    }
-    assert expected_traces.issubset(trace_names)
+    figure = response.json["response"]["shot-map-graph"]["figure"]
+    traces = {trace["name"]: trace for trace in figure["data"] if trace.get("name")}
+
+    assert set(traces) == expected_traces
+    for name, count in expected_marker_counts.items():
+        assert len(traces[name]["x"]) == count
+    if expected_density_count is not None:
+        density = traces["Shot frequency"]
+        assert sum(sum(row) for row in density["z"]) == expected_density_count
 
 
 def test_season_chips_are_valid_direct_header_children(dashboard_shots):
