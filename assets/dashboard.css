@@ -383,6 +383,33 @@ a {
   min-height: 260px;
 }
 
+.conversion-card {
+  min-width: 0;
+}
+
+.conversion-card .visualization-heading {
+  display: block;
+}
+
+.conversion-card .visualization-heading .section-subtitle {
+  margin-top: 0.4rem;
+}
+
+.conversion-chart,
+.conversion-chart .js-plotly-plot,
+.conversion-chart .plot-container,
+.conversion-chart .svg-container {
+  width: 100% !important;
+  min-width: 0;
+}
+
+.conversion-method-note {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
 .sankey-graph {
   width: 100%;
   min-width: 0;

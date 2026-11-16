@@ -360,9 +360,10 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     components = dict(_components_by_id(response.get_json()))
 
     assert {
-        "shot-conversion-placeholder",
         "shot-characteristics-placeholder",
     }.issubset(components)
+    assert "shot-conversion-placeholder" not in components
+    assert "shot-conversion-chart" in components
     assert "sankey-all-graph" in components
     assert "sankey-goals-graph" in components
     assert "shot-map-graph" in components
@@ -386,6 +387,23 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert set(
         components["sankey-goals-graph"]["figure"]["data"][0]["node"]["customdata"]
     ) == {"Play pattern", "Shot location", "Body part"}
+    conversion_figure = components["shot-conversion-chart"]["figure"]
+    assert components["shot-conversion-chart"]["style"] == {"height": "260px"}
+    assert components["shot-conversion-chart"]["responsive"] is True
+    assert conversion_figure["layout"]["height"] == 260
+    assert all(trace["type"] == "scatter" for trace in conversion_figure["data"])
+    conversion_traces = {
+        trace["name"]: trace
+        for trace in conversion_figure["data"]
+        if trace.get("name")
+    }
+    assert {"NWSL", "WSL"}.issubset(conversion_traces)
+    assert {"Inside box connector", "Outside box connector"}.issubset(
+        conversion_traces
+    )
+    assert "Shots with missing location excluded: 0" in response.get_data(
+        as_text=True
+    )
 
 
 def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
@@ -551,5 +569,7 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b".sankey-graph" in response.data
     assert b".sankey-graph .svg-container" in response.data
     assert b".sankey-toggle" in response.data
+    assert b".conversion-chart" in response.data
+    assert b".conversion-card .visualization-heading" in response.data
     assert b".dashboard-dropdown.is-focused .Select-control" in response.data
     assert b".VirtualizedSelectSelectedOption" in response.data
