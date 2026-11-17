@@ -82,6 +82,39 @@ def test_missing_league_pattern_has_no_fabricated_conversion_rate(
     assert "Unknown" in summary["play_pattern"].unique()
 
 
+def test_dumbbell_excludes_other_and_scales_to_displayed_patterns():
+    rows = []
+    for league, rates in (
+        ("NWSL", {"Regular Play": (10, 100), "Other": (8, 20)}),
+        ("FA Women's Super League", {"Regular Play": (20, 100), "Other": (18, 30)}),
+    ):
+        for pattern, (goals, shots_count) in rates.items():
+            rows.extend(
+                {
+                    "competition_name": league,
+                    "play_pattern": pattern,
+                    "shot_outcome": "Goal" if index < goals else "Saved",
+                }
+                for index in range(shots_count)
+            )
+
+    shots = pd.DataFrame(rows)
+    summary = prepare_play_pattern_conversion_data(shots)
+    figure = create_play_pattern_conversion_figure(shots)
+    plotted_patterns = {
+        pattern
+        for trace in figure.data
+        for pattern in trace.y
+    }
+
+    assert "Other" in summary["play_pattern"].unique()
+    assert "Other" not in plotted_patterns
+    assert "Regular Play" in plotted_patterns
+    assert figure.layout.xaxis.range[0] == 0
+    assert figure.layout.xaxis.range[1] == 25
+    assert figure.layout.yaxis.categoryarray == ("Regular Play",)
+
+
 def test_play_pattern_dumbbell_uses_league_colors_counts_and_hover(
     conversion_shots,
 ):
@@ -104,6 +137,8 @@ def test_play_pattern_dumbbell_uses_league_colors_counts_and_hover(
     }
     assert "From Corner" not in set(wsl.y)
     assert "From Free Kick" in set(wsl.y)
+    assert "Other" not in set(nwsl.y)
+    assert "Other" not in set(wsl.y)
     assert "Unknown" in figure.layout.yaxis.categoryarray
     assert figure.layout.yaxis.categoryarray[-1] == "Regular Play"
     assert figure.layout.xaxis.range[0] == 0

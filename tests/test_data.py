@@ -506,6 +506,10 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert "Conversion by play pattern" in layout_text
     assert "Conversion by assist status" in layout_text
     assert "no recorded key pass" in layout_text
+    assert "Other play patterns excluded from this comparison." in layout_text
+    assert "Other" not in set(
+        pattern_traces["NWSL"]["y"] + pattern_traces["WSL"]["y"]
+    )
 
 
 def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
@@ -727,6 +731,7 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b"grid-template-columns: minmax(0, 1fr)" in response.data
     assert b".sankey-league-panel" in response.data
     assert b".conversion-comparison-chart" in response.data
+    assert b".conversion-chart-note" in response.data
     assert b".goal-conversion-grid" in response.data
     assert (
         ".goal-conversion-grid {\n"

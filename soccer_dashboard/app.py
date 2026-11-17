@@ -470,6 +470,11 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                             )
                                         },
                                     ),
+                                    html.P(
+                                        "Other play patterns excluded from this "
+                                        "comparison.",
+                                        className="conversion-chart-note",
+                                    ),
                                 ],
                                 className="visualization-card conversion-card",
                             ),

@@ -149,8 +149,9 @@ def prepare_assist_conversion_data(shots: pd.DataFrame) -> pd.DataFrame:
 
 
 def create_play_pattern_conversion_figure(shots: pd.DataFrame) -> go.Figure:
-    """Build a league dumbbell chart for conversion by play pattern."""
+    """Build a league dumbbell chart excluding Other play patterns."""
     summary = prepare_play_pattern_conversion_data(shots)
+    summary = summary.loc[summary["play_pattern"].ne("Other")].copy()
     patterns = summary["play_pattern"].drop_duplicates().tolist()
     figure = go.Figure()
 
@@ -215,9 +216,12 @@ def create_play_pattern_conversion_figure(shots: pd.DataFrame) -> go.Figure:
             )
         )
 
-    maximum_value = summary["conversion_rate"].max(skipna=True)
+    displayed_rates = summary.loc[
+        summary["shots"].gt(0), "conversion_rate"
+    ]
+    maximum_value = displayed_rates.max(skipna=True)
     maximum_rate = float(maximum_value) if pd.notna(maximum_value) else 0
-    axis_maximum = min(100, max(10, ((maximum_rate + 4) // 5) * 5 + 5))
+    axis_maximum = max(10, ((maximum_rate + 4) // 5) * 5 + 5)
     height = max(390, 160 + 31 * len(patterns))
     figure.update_layout(
         template="plotly_dark",

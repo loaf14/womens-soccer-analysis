@@ -358,6 +358,13 @@ a {
   line-height: 1.5;
 }
 
+.conversion-chart-note {
+  margin: 0.25rem 0 0;
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .sankey-graph {
   width: 100%;
   min-width: 0;
