@@ -348,28 +348,6 @@ def test_dashboard_has_independent_league_kpi_groups(dashboard_shots):
     )
 
 
-def test_shot_map_coverage_notes_report_view_exclusions_per_league(dashboard_shots):
-    app = create_app(dashboard_shots)
-    components = dict(
-        _components_by_id(app.server.test_client().get("/_dash-layout").get_json())
-    )
-
-    nwsl_note = components["nwsl-map-coverage-note"]["children"]
-    wsl_note = components["wsl-map-coverage-note"]["children"]
-    assert "StatsBomb x=95–120 and y=10–70" in nwsl_note
-    assert "goal margin extends beyond x=120." in nwsl_note
-    assert "Valid shots outside this window: 1; not shown." in (
-        nwsl_note
-    )
-    assert "Shot locations unavailable or invalid: 0." in nwsl_note
-    assert "StatsBomb x=95–120 and y=10–70" in wsl_note
-    assert "goal margin extends beyond x=120." in wsl_note
-    assert "Valid shots outside this window: 1; not shown." in (
-        wsl_note
-    )
-    assert "Shot locations unavailable or invalid: 0." in wsl_note
-
-
 def test_shot_map_section_copy_does_not_claim_outside_half_shots_are_plotted(
     dashboard_shots,
 ):
@@ -378,6 +356,11 @@ def test_shot_map_section_copy_does_not_claim_outside_half_shots_are_plotted(
 
     assert "Compare shot locations and outcomes across both leagues." in layout
     assert "every attempt across both leagues" not in layout
+    assert '"children":"Compare shot locations"' not in layout
+    assert "zoomed penalty-area view" not in layout
+    assert "Heat intensity represents shot frequency" not in layout
+    assert "Focused view: StatsBomb" not in layout
+    assert "Valid shots outside this window" not in layout
 
 
 def test_dashboard_has_no_global_filter_controls_or_combined_kpis(dashboard_shots):
@@ -432,12 +415,7 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
         components["wsl-shot-map-graph"]["figure"]["data"][0]["zmax"],
     } == {1}
     assert components["nwsl-shot-map-title"]["children"] == "NWSL · 2023"
-    assert components["wsl-shot-map-title"]["children"] == (
-        "FA Women's Super League · 2023/24"
-    )
-    assert "equal colors indicate the same shot count per bin" in (
-        response.get_data(as_text=True)
-    )
+    assert components["wsl-shot-map-title"]["children"] == "WSL · 2023/24"
     assert components["sankey-mode"]["value"] == "all"
     assert {
         option["value"] for option in components["sankey-mode"]["options"]

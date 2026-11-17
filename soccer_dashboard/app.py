@@ -94,7 +94,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
             shots["competition_name"].eq("FA Women's Super League")
         ].copy(),
     }
-    map_coverage_notes = {}
+    map_exclusion_counts = {}
     for league, league_data in league_shots.items():
         map_shots = prepare_shot_coordinates(league_data)
         shots_outside_view = int(
@@ -104,12 +104,10 @@ def create_app(shots: pd.DataFrame) -> Dash:
             ).sum()
         )
         shots_without_location = int((~map_shots["has_valid_location"]).sum())
-        map_coverage_notes[league] = (
-            "Focused view: StatsBomb x=95–120 and y=10–70; goal margin "
-            "extends beyond x=120. "
-            f"Valid shots outside this window: {shots_outside_view:,}; not shown. "
-            f"Shot locations unavailable or invalid: {shots_without_location:,}."
-        )
+        map_exclusion_counts[league] = {
+            "outside_view": shots_outside_view,
+            "unavailable_location": shots_without_location,
+        }
     shared_density_max = max(
         max_shot_density(league_data) for league_data in league_shots.values()
     )
@@ -211,19 +209,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 [
                                     html.Div(
                                         [
-                                            html.H2(
-                                                "Compare shot locations",
-                                                className="section-title",
-                                            ),
-                                            html.P(
-                                                "NWSL and WSL shots share a zoomed "
-                                                "penalty-area view.",
-                                                className="section-subtitle",
-                                            ),
-                                        ]
-                                    ),
-                                    html.Div(
-                                        [
                                             html.Label(
                                                 "MAP VIEW",
                                                 htmlFor="shot-map-view",
@@ -255,15 +240,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                         className="map-view-control",
                                     ),
                                 ],
-                                className="shot-map-toolbar",
-                            ),
-                            html.P(
-                                "Heat intensity represents shot frequency, not "
-                                "scoring probability. Both maps share one color "
-                                "scale, so equal colors indicate the same shot "
-                                "count per bin. Density bins are 4 × 4 StatsBomb "
-                                "coordinate units.",
-                                className="map-method-note",
+                                className="shot-map-toolbar shot-map-toolbar-controls",
                             ),
                             html.Div(
                                 [
@@ -273,11 +250,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                 "NWSL · 2023",
                                                 className="shot-map-league-title nwsl",
                                                 id="nwsl-shot-map-title",
-                                            ),
-                                            html.P(
-                                                map_coverage_notes["nwsl"],
-                                                id="nwsl-map-coverage-note",
-                                                className="map-coverage-note",
                                             ),
                                             dcc.Graph(
                                                 id="nwsl-shot-map-graph",
@@ -299,14 +271,9 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                     html.Section(
                                         [
                                             html.H3(
-                                                "FA Women's Super League · 2023/24",
+                                                "WSL · 2023/24",
                                                 className="shot-map-league-title wsl",
                                                 id="wsl-shot-map-title",
-                                            ),
-                                            html.P(
-                                                map_coverage_notes["wsl"],
-                                                id="wsl-map-coverage-note",
-                                                className="map-coverage-note",
                                             ),
                                             dcc.Graph(
                                                 id="wsl-shot-map-graph",
