@@ -112,7 +112,13 @@ def create_app(shots: pd.DataFrame) -> Dash:
     seasons = (
         shots[["competition_name", "season_name"]]
         .drop_duplicates()
-        .sort_values(["competition_name", "season_name"])
+        .assign(
+            _competition_order=lambda rows: rows["competition_name"].map(
+                {"NWSL": 0, "FA Women's Super League": 1}
+            )
+        )
+        .sort_values(["_competition_order", "season_name"])
+        .drop(columns="_competition_order")
     )
     season_summary = html.Div(
         [
@@ -311,8 +317,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 className="section-title",
                             ),
                             html.P(
-                                "Compare shot patterns and outcomes between "
-                                "the NWSL and WSL.",
+                                "Compare shot patterns and outcomes across leagues.",
                                 className="section-subtitle",
                             ),
                         ],
