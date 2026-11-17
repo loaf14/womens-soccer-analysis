@@ -24,12 +24,11 @@ COMPETITION_VALUES = {
 }
 
 
-def _metric_card(label: str, value: str, detail: str, card_id: str) -> html.Article:
+def _metric_card(label: str, value: str, card_id: str) -> html.Article:
     return html.Article(
         [
             html.P(label, className="metric-label"),
             html.P(value, id=card_id, className="metric-value"),
-            html.P(detail, className="metric-detail"),
         ],
         className="metric-card",
     )
@@ -46,31 +45,26 @@ def _league_kpi_group(
                     _metric_card(
                         "TOTAL SHOTS",
                         f"{int(metrics['shots']):,}",
-                        "Shot events",
                         f"{competition_class}-shots",
                     ),
                     _metric_card(
                         "TOTAL GOALS",
                         f"{int(metrics['goals']):,}",
-                        "Outcome = Goal",
                         f"{competition_class}-goals",
                     ),
                     _metric_card(
                         "GOAL CONVERSION",
                         f"{metrics['conversion_rate']:.1f}%",
-                        "Goals ÷ shots",
                         f"{competition_class}-conversion-rate",
                     ),
                     _metric_card(
                         "MATCHES ANALYZED",
                         f"{int(metrics['matches']):,}",
-                        "Unique match IDs",
                         f"{competition_class}-matches",
                     ),
                     _metric_card(
                         "SHOTS PER MATCH",
                         f"{metrics['shots_per_match']:.1f}",
-                        "Shots ÷ matches",
                         f"{competition_class}-shots-per-match",
                     ),
                 ],

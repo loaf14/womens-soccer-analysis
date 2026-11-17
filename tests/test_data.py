@@ -334,6 +334,18 @@ def test_dashboard_has_independent_league_kpi_groups(dashboard_shots):
         "matches",
         "shots-per-match",
     )] == ["2", "1", "50.0%", "2", "1.0"]
+    layout = response.get_data(as_text=True)
+    assert "metric-detail" not in layout
+    assert all(
+        detail not in layout
+        for detail in (
+            "Shot events",
+            "Outcome = Goal",
+            "Goals ÷ shots",
+            "Unique match IDs",
+            "Shots ÷ matches",
+        )
+    )
 
 
 def test_shot_map_coverage_note_reports_outside_half_shots(dashboard_shots):

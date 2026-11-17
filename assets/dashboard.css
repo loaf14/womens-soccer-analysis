@@ -225,7 +225,7 @@ a {
 
 .metric-card {
   min-width: 0;
-  min-height: 132px;
+  min-height: 104px;
   padding: 0.9rem 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: 0.7rem;
@@ -242,20 +242,13 @@ a {
 }
 
 .metric-value {
-  margin: 0.6rem 0 0.15rem;
+  margin: 0.75rem 0 0;
   font-family: var(--font-display);
   font-size: clamp(1.35rem, 1.7vw, 1.9rem);
   font-weight: 600;
   letter-spacing: -0.055em;
   line-height: 1.1;
   overflow-wrap: anywhere;
-}
-
-.metric-detail {
-  margin: 0.35rem 0 0;
-  color: var(--color-subtle);
-  font-size: 0.68rem;
-  line-height: 1.4;
 }
 
 .visualization-card {
