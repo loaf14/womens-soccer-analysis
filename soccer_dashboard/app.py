@@ -13,12 +13,8 @@ from soccer_dashboard.shot_map import (
 )
 from soccer_dashboard.league_kpis import prepare_league_metrics
 from soccer_dashboard.shot_conversion import (
-    create_conversion_figure,
-    prepare_conversion_data,
-)
-from soccer_dashboard.play_pattern import (
-    create_play_pattern_figure,
-    prepare_play_pattern_data,
+    create_assist_conversion_figure,
+    create_play_pattern_conversion_figure,
 )
 from soccer_dashboard.storage import load_local_shots
 
@@ -83,10 +79,8 @@ def _league_kpi_group(
 def create_app(shots: pd.DataFrame) -> Dash:
     """Create the dashboard using an already loaded shot dataset."""
     league_metrics = prepare_league_metrics(shots).set_index("competition_name")
-    conversion_figure = create_conversion_figure(shots)
-    _, conversion_missing_locations = prepare_conversion_data(shots)
-    play_pattern_figure = create_play_pattern_figure(shots)
-    _, missing_play_patterns = prepare_play_pattern_data(shots)
+    play_pattern_conversion_figure = create_play_pattern_conversion_figure(shots)
+    assist_conversion_figure = create_assist_conversion_figure(shots)
     league_shots = {
         "nwsl": shots.loc[shots["competition_name"].eq("NWSL")].copy(),
         "wsl": shots.loc[
@@ -440,11 +434,17 @@ def create_app(shots: pd.DataFrame) -> Dash:
                 [
                     html.Div(
                         [
-                            html.P("03  /  LEAGUE COMPARISON", className="section-kicker"),
-                            html.H2("Two leagues, different profiles", className="section-title"),
                             html.P(
-                                "Compare finishing efficiency and the choices "
-                                "behind each attempt.",
+                                "03  /  GOAL-SCORING EFFICIENCY",
+                                className="section-kicker",
+                            ),
+                            html.H2(
+                                "What influences shot conversion?",
+                                className="section-title",
+                            ),
+                            html.P(
+                                "Compare goal conversion across play patterns "
+                                "and recorded assist status.",
                                 className="section-subtitle",
                             ),
                         ],
@@ -454,86 +454,55 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         [
                             html.Section(
                                 [
-                                    html.Div(
-                                        [
-                                            html.H2(
-                                                "Shot conversion comparison",
-                                                className="section-title",
-                                            ),
-                                            html.P(
-                                                "Goal conversion by shot location. "
-                                                "Differences are descriptive and "
-                                                "do not imply statistical "
-                                                "significance.",
-                                                className="section-subtitle",
-                                            ),
-                                        ],
-                                        className="visualization-heading",
+                                    html.H3(
+                                        "Conversion by play pattern",
+                                        className="comparison-chart-title",
                                     ),
                                     dcc.Graph(
-                                        id="shot-conversion-chart",
-                                        figure=conversion_figure,
+                                        id="play-pattern-conversion-chart",
+                                        figure=play_pattern_conversion_figure,
                                         config={"displayModeBar": False},
                                         responsive=True,
-                                        className="conversion-chart",
-                                        style={"height": "260px"},
-                                    ),
-                                    html.P(
-                                        f"Shots with missing location excluded: "
-                                        f"{conversion_missing_locations:,}. "
-                                        "Groups with no shots have no conversion "
-                                        "rate.",
-                                        className="conversion-method-note",
+                                        className="conversion-comparison-chart",
+                                        style={
+                                            "height": (
+                                                f"{play_pattern_conversion_figure.layout.height}px"
+                                            )
+                                        },
                                     ),
                                 ],
                                 className="visualization-card conversion-card",
                             ),
                             html.Section(
                                 [
-                                    html.Div(
-                                        [
-                                            html.H2(
-                                                "Where Do Shots Come From?",
-                                                className="section-title",
-                                            ),
-                                            html.P(
-                                                "Distribution of shots by play "
-                                                "pattern across the NWSL and WSL.",
-                                                className="section-subtitle",
-                                            ),
-                                        ],
-                                        className="visualization-heading",
+                                    html.H3(
+                                        "Conversion by assist status",
+                                        className="comparison-chart-title",
                                     ),
                                     dcc.Graph(
-                                        id="play-pattern-chart",
-                                        figure=play_pattern_figure,
+                                        id="assist-conversion-chart",
+                                        figure=assist_conversion_figure,
                                         config={"displayModeBar": False},
                                         responsive=True,
-                                        className="play-pattern-chart",
+                                        className="conversion-comparison-chart",
                                         style={
                                             "height": (
-                                                f"{play_pattern_figure.layout.height}px"
+                                                f"{assist_conversion_figure.layout.height}px"
                                             )
                                         },
                                     ),
-                                    html.P(
-                                        f"Percentages use each league's total "
-                                        f"shots; missing play patterns "
-                                        f"({missing_play_patterns:,}) are shown "
-                                        "as a separate category. These values "
-                                        "describe shot distribution, not goal "
-                                        "conversion rates or the probability "
-                                        "of producing a shot from an attacking "
-                                        "opportunity.",
-                                        className="play-pattern-method-note",
-                                    ),
                                 ],
-                                className=(
-                                    "visualization-card play-pattern-card"
-                                ),
+                                className="visualization-card conversion-card",
                             ),
                         ],
-                        className="comparison-grid",
+                        className="comparison-grid goal-conversion-grid",
+                    ),
+                    html.P(
+                        "Conversion differences are descriptive, not proof of "
+                        "causation or statistical significance. Unassisted means "
+                        "no recorded key pass, not necessarily a chance created "
+                        "entirely alone.",
+                        className="conversion-method-note",
                     ),
                 ],
                 className="dashboard-section",

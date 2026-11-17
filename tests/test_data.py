@@ -9,7 +9,7 @@ from soccer_dashboard.storage import load_local_shots
 
 @pytest.fixture
 def dashboard_shots():
-    return pd.DataFrame(
+    shots = pd.DataFrame(
         [
             {
                 "competition_name": "NWSL",
@@ -73,6 +73,9 @@ def dashboard_shots():
             },
         ]
     )
+    shots["shot_key_pass_id"] = ["pass-1", None, None, "pass-2", None]
+    shots["assisted"] = shots["shot_key_pass_id"].notna()
+    return shots
 
 
 def _components_by_id(node):
@@ -120,6 +123,7 @@ def statsbomb_responses(monkeypatch):
                 "shot_type": "Open Play",
                 "shot_body_part": "Right Foot",
                 "play_pattern": "Regular Play",
+                "shot_key_pass_id": "pass-1",
                 "match_id": 1001,
                 "team": "Home",
                 "player": "Forward",
@@ -132,6 +136,7 @@ def statsbomb_responses(monkeypatch):
                 "shot_type": "Open Play",
                 "shot_body_part": "Left Foot",
                 "play_pattern": "Regular Play",
+                "shot_key_pass_id": None,
                 "match_id": 1001,
                 "team": "Away",
                 "player": "Midfielder",
@@ -144,6 +149,7 @@ def statsbomb_responses(monkeypatch):
                 "shot_type": None,
                 "shot_body_part": None,
                 "play_pattern": "Regular Play",
+                "shot_key_pass_id": None,
                 "match_id": 1001,
                 "team": "Home",
                 "player": "Defender",
@@ -169,6 +175,9 @@ def test_load_shots_returns_shot_rows_with_metadata_and_box_flag(statsbomb_respo
     assert shots["competition_name"].tolist() == ["NWSL", "NWSL"]
     assert shots["season_name"].tolist() == ["2023", "2023"]
     assert shots["in_box"].tolist() == [True, False]
+    assert shots["shot_key_pass_id"].iloc[0] == "pass-1"
+    assert pd.isna(shots["shot_key_pass_id"].iloc[1])
+    assert shots["assisted"].tolist() == [True, False]
 
 
 def test_load_shots_rejects_unknown_competition_season(statsbomb_responses):
@@ -192,6 +201,7 @@ def test_load_shots_rejects_invalid_shot_location(
                 "shot_type": "Open Play",
                 "shot_body_part": "Head",
                 "play_pattern": "Regular Play",
+                "shot_key_pass_id": None,
                 "match_id": 1001,
                 "team": "Home",
                 "player": "Forward",
@@ -257,7 +267,8 @@ def test_build_shots_combines_seasons_and_round_trips_parquet(tmp_path, monkeypa
     nwsl = pd.DataFrame(
         [{column: value for column, value in zip(data.OUTPUT_COLUMNS, [
             "nwsl-shot", [110.0, 40.0], "Goal", "Open Play", "Right Foot",
-            "Regular Play", 1001, "NWSL", "Forward", "NWSL", "2023", True,
+            "Regular Play", "pass-1", 1001, "NWSL", "Forward", "NWSL",
+            "2023", True, True,
         ])}]
     )
     wsl = nwsl.copy()
@@ -281,6 +292,7 @@ def test_build_shots_combines_seasons_and_round_trips_parquet(tmp_path, monkeypa
     loaded = load_local_shots(output_path)
     assert loaded.drop(columns="location").equals(combined.drop(columns="location"))
     assert loaded["location"].map(list).tolist() == combined["location"].tolist()
+    assert loaded["assisted"].tolist() == [True, True]
 
 
 def test_build_shots_can_verify_the_recorded_historical_total(tmp_path, monkeypatch):
@@ -400,19 +412,16 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     components = dict(_components_by_id(response.get_json()))
 
     assert "shot-characteristics-placeholder" not in components
-    assert "play-pattern-chart" in components
-    assert components["play-pattern-chart"]["responsive"] is True
-    assert components["play-pattern-chart"]["style"]["height"].endswith("px")
-    play_pattern_figure = components["play-pattern-chart"]["figure"]
-    assert [trace["name"] for trace in play_pattern_figure["data"]] == [
-        "NWSL",
-        "WSL",
-    ]
-    assert play_pattern_figure["layout"]["height"] == int(
-        components["play-pattern-chart"]["style"]["height"][:-2]
+    assert "play-pattern-chart" not in components
+    assert "shot-conversion-chart" not in components
+    assert "play-pattern-conversion-chart" in components
+    assert "assist-conversion-chart" in components
+    assert components["play-pattern-conversion-chart"]["className"] == (
+        "conversion-comparison-chart"
     )
-    assert "shot-conversion-placeholder" not in components
-    assert "shot-conversion-chart" in components
+    assert components["assist-conversion-chart"]["className"] == (
+        "conversion-comparison-chart"
+    )
     assert "nwsl-sankey-graph" in components
     assert "wsl-sankey-graph" in components
     assert "sankey-all-graph" not in components
@@ -465,29 +474,38 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     )
     assert components["nwsl-sankey-graph"]["config"]["responsive"] is True
     assert components["wsl-sankey-graph"]["config"]["responsive"] is True
-    conversion_figure = components["shot-conversion-chart"]["figure"]
-    assert components["shot-conversion-chart"]["style"] == {"height": "260px"}
-    assert components["shot-conversion-chart"]["responsive"] is True
-    assert conversion_figure["layout"]["height"] == 260
-    assert all(trace["type"] == "scatter" for trace in conversion_figure["data"])
-    conversion_traces = {
-        trace["name"]: trace
-        for trace in conversion_figure["data"]
-        if trace.get("name")
+    pattern_figure = components["play-pattern-conversion-chart"]["figure"]
+    assist_figure = components["assist-conversion-chart"]["figure"]
+    for chart_id, figure in (
+        ("play-pattern-conversion-chart", pattern_figure),
+        ("assist-conversion-chart", assist_figure),
+    ):
+        assert components[chart_id]["responsive"] is True
+        assert int(components[chart_id]["style"]["height"][:-2]) == (
+            figure["layout"]["height"]
+        )
+    assert {trace["name"] for trace in pattern_figure["data"]} >= {
+        "NWSL",
+        "WSL",
     }
-    assert {"NWSL", "WSL"}.issubset(conversion_traces)
-    assert {"Inside box connector", "Outside box connector"}.issubset(
-        conversion_traces
-    )
-    assert "Shots with missing location excluded: 0" in response.get_data(
-        as_text=True
-    )
+    assert [trace["type"] for trace in assist_figure["data"]] == ["bar", "bar"]
+    assert [trace["name"] for trace in assist_figure["data"]] == ["NWSL", "WSL"]
+    pattern_traces = {
+        trace["name"]: trace
+        for trace in pattern_figure["data"]
+        if trace.get("name") in {"NWSL", "WSL"}
+    }
+    assert pattern_traces["NWSL"]["marker"]["color"] == "#e7a45e"
+    assert pattern_traces["WSL"]["marker"]["color"] == "#8db4ff"
+    assert assist_figure["data"][0]["marker"]["color"] == "#e7a45e"
+    assert assist_figure["data"][1]["marker"]["color"] == "#8db4ff"
     layout_text = response.get_data(as_text=True)
-    assert "Where Do Shots Come From?" in layout_text
-    assert "Distribution of shots by play pattern" in layout_text
-    assert "missing play patterns (0) are shown as a separate category" in (
-        layout_text
-    )
+    assert "GOAL-SCORING EFFICIENCY" in layout_text
+    assert "What influences shot conversion?" in layout_text
+    assert "Compare goal conversion across play patterns" in layout_text
+    assert "Conversion by play pattern" in layout_text
+    assert "Conversion by assist status" in layout_text
+    assert "no recorded key pass" in layout_text
 
 
 def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
@@ -708,9 +726,12 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b"@media (max-width: 1100px)" in response.data
     assert b"grid-template-columns: minmax(0, 1fr)" in response.data
     assert b".sankey-league-panel" in response.data
-    assert b".conversion-chart" in response.data
-    assert b".conversion-card .visualization-heading" in response.data
-    assert b".play-pattern-chart" in response.data
-    assert b".play-pattern-method-note" in response.data
+    assert b".conversion-comparison-chart" in response.data
+    assert b".goal-conversion-grid" in response.data
+    assert (
+        ".goal-conversion-grid {\n"
+        "    grid-template-columns: minmax(0, 1fr);\n"
+        "  }"
+    ) in stylesheet
     assert b".league-kpi-grid" in response.data
     assert b".league-kpi-metrics" in response.data

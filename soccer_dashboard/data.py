@@ -15,11 +15,18 @@ SHOT_COLUMNS = (
     "shot_type",
     "shot_body_part",
     "play_pattern",
+    "shot_key_pass_id",
     "match_id",
     "team",
     "player",
 )
-OUTPUT_COLUMNS = (*SHOT_COLUMNS, "competition_name", "season_name", "in_box")
+OUTPUT_COLUMNS = (
+    *SHOT_COLUMNS,
+    "competition_name",
+    "season_name",
+    "in_box",
+    "assisted",
+)
 EVENT_COLUMNS = ("type", *SHOT_COLUMNS)
 
 
@@ -101,6 +108,7 @@ def load_shots(competition_id: int, season_id: int) -> pd.DataFrame:
             _location_is_in_box(location, event_id)
             for location, event_id in zip(shots["location"], shots["id"])
         ]
+        shots["assisted"] = shots["shot_key_pass_id"].notna()
         shot_frames.append(shots)
 
     if not shot_frames:
