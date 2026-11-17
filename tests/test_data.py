@@ -657,6 +657,13 @@ def test_season_chips_are_valid_direct_header_children(dashboard_shots):
 
     assert season_chips["type"] == "Div"
     assert season_chips["props"]["className"] == "season-line"
+    assert [child["props"]["children"] for child in season_chips["props"]["children"]] == [
+        "NWSL · 2023",
+        "FA Women's Super League · 2023/2024",
+    ]
+    assert [
+        child["props"]["className"] for child in season_chips["props"]["children"]
+    ] == ["season-chip nwsl", "season-chip wsl"]
     assert sum(
         component["props"].get("className") == "season-line"
         for component in children
@@ -670,7 +677,7 @@ def test_sankey_copy_describes_categorical_associations_and_denominator(
     layout = app.server.test_client().get("/_dash-layout").get_data(as_text=True)
 
     assert "How shot characteristics connect" in layout
-    assert "Compare shot patterns and outcomes between the NWSL and WSL" in layout
+    assert "Compare shot patterns and outcomes across leagues." in layout
     assert "Link widths show shot counts" in layout
     assert "each league diagram is scaled independently" in layout
     assert "share of the source category, not goal conversion rates" in layout
@@ -717,7 +724,15 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     ) in stylesheet
     assert ".sankey-toggle .shot-map-option {\n  gap: 0.5rem;\n}" in stylesheet
     assert b".sankey-toggle" in response.data
-    assert "  gap: 0.4rem;" in stylesheet
+    assert (
+        ".shot-map-radio {\n"
+        "  width: 0.85rem;\n"
+        "  height: 0.85rem;\n"
+        "  margin: 0 8px 0 0;\n"
+        "  accent-color: var(--color-pitch);\n"
+        "  vertical-align: middle;\n"
+        "}"
+    ) in stylesheet
     assert "@media (max-width: 900px)" in stylesheet
     assert (
         ".sankey-toolbar {\n"
