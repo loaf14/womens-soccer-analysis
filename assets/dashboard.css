@@ -443,6 +443,36 @@ a {
   padding-bottom: 0.75rem;
 }
 
+.shot-map-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.shot-map-panel {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.8rem;
+  background: rgb(12 20 17 / 62%);
+}
+
+.shot-map-league-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.shot-map-league-title.nwsl {
+  color: var(--color-nwsl);
+}
+
+.shot-map-league-title.wsl {
+  color: var(--color-wsl);
+}
+
 .shot-map-toolbar {
   display: flex;
   align-items: flex-end;
@@ -518,6 +548,11 @@ a {
   line-height: 1.55;
 }
 
+.shot-map-panel .map-coverage-note {
+  min-height: 3.1em;
+  margin-top: 0.45rem;
+}
+
 .map-method-note {
   margin-top: 0.25rem;
   color: var(--color-subtle);
@@ -581,6 +616,10 @@ a {
 
   .hero {
     align-items: flex-start;
+  }
+
+  .shot-map-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .source-badge {

@@ -228,7 +228,9 @@ _SHOT_HOVER_TEMPLATE = (
 )
 
 
-def _add_density(fig: go.Figure, shots: pd.DataFrame) -> None:
+def _density_grid(
+    shots: pd.DataFrame,
+) -> tuple[list[float], list[float], list[list[int]], int]:
     x_start = -HALF_PITCH_WIDTH / 2
     x_bin_count = int(HALF_PITCH_WIDTH / DENSITY_BIN_SIZE)
     y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
@@ -250,7 +252,24 @@ def _add_density(fig: go.Figure, shots: pd.DataFrame) -> None:
         [counts[x_index][y_index] for x_index in range(x_bin_count)]
         for y_index in range(y_bin_count)
     ]
+    return x_centers, y_centers, z_values, max(map(max, counts))
 
+
+def max_shot_density(shots: pd.DataFrame) -> int:
+    """Return the largest 4-by-4 attacking-half shot count for a dataset."""
+    prepared = prepare_shot_coordinates(shots)
+    in_half = prepared.loc[prepared["in_attacking_half"]]
+    return _density_grid(in_half)[3]
+
+
+def _add_density(
+    fig: go.Figure, shots: pd.DataFrame, density_max: int | None
+) -> None:
+    x_centers, y_centers, z_values, actual_max = _density_grid(shots)
+    if density_max is not None and density_max < actual_max:
+        raise ValueError(
+            "density_max cannot be lower than the maximum shot count per bin"
+        )
     fig.add_trace(
         go.Heatmap(
             x=x_centers,
@@ -270,7 +289,7 @@ def _add_density(fig: go.Figure, shots: pd.DataFrame) -> None:
                 "bgcolor": "rgba(11,17,16,0.82)",
             },
             zmin=0,
-            zmax=max(1, max(map(max, counts))),
+            zmax=max(1, density_max if density_max is not None else actual_max),
             hoverongaps=False,
             hovertemplate=(
                 "Shot attempts: %{z}<br>"
@@ -320,7 +339,10 @@ def _add_shot_markers(
 
 
 def create_shot_map(
-    shots: pd.DataFrame, mode: ShotMapMode = "hybrid"
+    shots: pd.DataFrame,
+    mode: ShotMapMode = "hybrid",
+    *,
+    density_max: int | None = None,
 ) -> go.Figure:
     """Create an individual, shot-frequency, or hybrid attacking-half map.
 
@@ -329,7 +351,8 @@ def create_shot_map(
     are not silently included or repositioned; the dashboard reports these
     counts in its coverage note. Density uses 4-by-4 coordinate-unit histogram
     bins and represents shot frequency, not scoring probability. The upper
-    pitch boundaries are included in the final bins.
+    pitch boundaries are included in the final bins. ``density_max`` can set
+    a common color-scale maximum when comparing multiple league maps.
     """
     if mode not in {"individual", "heatmap", "hybrid"}:
         raise ValueError(f"Unknown shot map mode: {mode!r}")
@@ -339,7 +362,7 @@ def create_shot_map(
     fig = go.Figure()
 
     if mode in {"heatmap", "hybrid"}:
-        _add_density(fig, in_half)
+        _add_density(fig, in_half, density_max)
 
     fig.update_layout(
         shapes=pitch_shapes(),
@@ -348,7 +371,7 @@ def create_shot_map(
         plot_bgcolor="#14251c",
         font={"family": "DM Sans, Segoe UI, sans-serif", "color": "#f0f3ed"},
         margin={"l": 24, "r": 30, "t": 28, "b": 24},
-        height=680,
+        height=500,
         autosize=True,
         hoverlabel={
             "bgcolor": "#111a17",

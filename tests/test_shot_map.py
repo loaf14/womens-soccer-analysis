@@ -4,6 +4,7 @@ import pytest
 from soccer_dashboard.shot_map import (
     DENSITY_BIN_SIZE,
     create_shot_map,
+    max_shot_density,
     pitch_shapes,
     prepare_shot_coordinates,
 )
@@ -156,6 +157,41 @@ def test_heatmap_uses_every_valid_shot_in_attacking_half_and_documented_bins(
     assert density.colorbar.title.text == "Shot attempts per bin"
     assert len(density.colorscale) > 1
     assert sum(map(sum, density.z)) == 3
+
+
+def test_density_max_can_be_shared_without_independent_normalization():
+    nwsl = pd.DataFrame(
+        {
+            "location": [[108.0, 40.0]] * 3 + [[45.0, 40.0], None],
+            "shot_outcome": ["Saved"] * 5,
+        }
+    )
+    wsl = pd.DataFrame(
+        {
+            "location": [[110.0, 42.0]] * 2,
+            "shot_outcome": ["Goal", "Saved"],
+        }
+    )
+    shared_max = max(max_shot_density(nwsl), max_shot_density(wsl))
+
+    nwsl_figure = create_shot_map(nwsl, mode="heatmap", density_max=shared_max)
+    wsl_figure = create_shot_map(wsl, mode="heatmap", density_max=shared_max)
+    nwsl_density = _trace_by_name(nwsl_figure, "Shot frequency")
+    wsl_density = _trace_by_name(wsl_figure, "Shot frequency")
+
+    assert max_shot_density(nwsl) == 3
+    assert max_shot_density(wsl) == 2
+    assert nwsl_density.zmax == wsl_density.zmax == 3
+    assert list(nwsl_density.x) == list(wsl_density.x)
+    assert list(nwsl_density.y) == list(wsl_density.y)
+    assert nwsl_density.colorscale == wsl_density.colorscale
+    assert sum(map(sum, nwsl_density.z)) == 3
+    assert sum(map(sum, wsl_density.z)) == 2
+
+
+def test_shared_density_max_rejects_a_scale_below_local_peak(shot_map_shots):
+    with pytest.raises(ValueError, match="cannot be lower"):
+        create_shot_map(shot_map_shots, mode="heatmap", density_max=0)
 
 
 @pytest.mark.parametrize("mode", ["heatmap", "hybrid"])
