@@ -653,10 +653,21 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     response = app.server.test_client().get("/assets/dashboard.css")
 
     assert response.status_code == 200
+    stylesheet = response.get_data(as_text=True).replace("\r\n", "\n")
     assert b"--color-page: #0b1110" in response.data
     assert b".sankey-graph" in response.data
     assert b".sankey-graph .svg-container" in response.data
+    assert (
+        ".sankey-toolbar {\n"
+        "  display: flex;\n"
+        "  align-items: center;\n"
+        "  justify-content: space-between;\n"
+        "  gap: 1.5rem;\n"
+        "  padding: 0;\n"
+        "}"
+    ) in stylesheet
     assert b".sankey-toggle" in response.data
+    assert b"gap: 0.55rem;" in response.data
     assert b".sankey-comparison-grid" in response.data
     assert b"@media (max-width: 1100px)" in response.data
     assert b"grid-template-columns: minmax(0, 1fr)" in response.data
