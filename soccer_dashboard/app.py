@@ -7,6 +7,7 @@ from dash import Dash, Input, Output, dcc, html
 
 from soccer_dashboard.sankey import create_sankey_figure
 from soccer_dashboard.shot_map import create_shot_map, prepare_shot_coordinates
+from soccer_dashboard.league_kpis import prepare_league_metrics
 from soccer_dashboard.shot_conversion import (
     create_conversion_figure,
     prepare_conversion_data,
@@ -23,37 +24,6 @@ COMPETITION_VALUES = {
 }
 
 
-def _competition_options(shots: pd.DataFrame) -> list[dict[str, str]]:
-    available = set(shots["competition_name"].dropna().unique())
-    options = [{"label": "Both leagues", "value": "all"}]
-    options.extend(
-        {
-            "label": "WSL" if name == "FA Women's Super League" else name,
-            "value": COMPETITION_VALUES[name],
-        }
-        for name in COMPETITION_VALUES
-        if name in available
-    )
-    return options
-
-
-def _filter(label: str, component_id: str, options: list[dict[str, str]]) -> html.Div:
-    return html.Div(
-        [
-            html.Label(label, htmlFor=component_id, className="filter-label"),
-            dcc.Dropdown(
-                id=component_id,
-                options=options,
-                value=options[0]["value"],
-                clearable=False,
-                searchable=True,
-                className="dashboard-dropdown",
-            ),
-        ],
-        className="filter-control",
-    )
-
-
 def _metric_card(label: str, value: str, detail: str, card_id: str) -> html.Article:
     return html.Article(
         [
@@ -65,12 +35,57 @@ def _metric_card(label: str, value: str, detail: str, card_id: str) -> html.Arti
     )
 
 
+def _league_kpi_group(
+    league: str, competition_class: str, metrics: pd.Series
+) -> html.Section:
+    return html.Section(
+        [
+            html.H2(league, className="league-kpi-title"),
+            html.Div(
+                [
+                    _metric_card(
+                        "TOTAL SHOTS",
+                        f"{int(metrics['shots']):,}",
+                        "Shot events",
+                        f"{competition_class}-shots",
+                    ),
+                    _metric_card(
+                        "TOTAL GOALS",
+                        f"{int(metrics['goals']):,}",
+                        "Outcome = Goal",
+                        f"{competition_class}-goals",
+                    ),
+                    _metric_card(
+                        "GOAL CONVERSION",
+                        f"{metrics['conversion_rate']:.1f}%",
+                        "Goals ÷ shots",
+                        f"{competition_class}-conversion-rate",
+                    ),
+                    _metric_card(
+                        "MATCHES ANALYZED",
+                        f"{int(metrics['matches']):,}",
+                        "Unique match IDs",
+                        f"{competition_class}-matches",
+                    ),
+                    _metric_card(
+                        "SHOTS PER MATCH",
+                        f"{metrics['shots_per_match']:.1f}",
+                        "Shots ÷ matches",
+                        f"{competition_class}-shots-per-match",
+                    ),
+                ],
+                className="league-kpi-metrics",
+            ),
+        ],
+        className=f"league-kpi-group {competition_class}",
+        id=f"{competition_class}-kpi-group",
+    )
+
+
 def create_app(shots: pd.DataFrame) -> Dash:
     """Create the dashboard using an already loaded shot dataset."""
-    goals = int(shots["shot_outcome"].eq("Goal").sum())
     total_shots = len(shots)
-    conversion_rate = goals / total_shots * 100 if total_shots else 0
-    matches = int(shots.groupby(["competition_name", "match_id"]).ngroups)
+    league_metrics = prepare_league_metrics(shots).set_index("competition_name")
     conversion_figure = create_conversion_figure(shots)
     _, conversion_missing_locations = prepare_conversion_data(shots)
     play_pattern_figure = create_play_pattern_figure(shots)
@@ -152,100 +167,21 @@ def create_app(shots: pd.DataFrame) -> Dash:
                 [
                     html.Div(
                         [
-                            html.H2("Explore the dataset", className="section-title"),
-                            html.P(
-                                "Choose a lens for the analysis. Filters will be "
-                                "interactive in a later phase.",
-                                className="section-subtitle",
+                            _league_kpi_group(
+                                "NWSL",
+                                "nwsl",
+                                league_metrics.loc["NWSL"],
+                            ),
+                            _league_kpi_group(
+                                "WSL",
+                                "wsl",
+                                league_metrics.loc["FA Women's Super League"],
                             ),
                         ],
-                        className="section-heading",
-                    ),
-                    html.Div(
-                        [
-                            _filter(
-                                "Competition",
-                                "competition-filter",
-                                _competition_options(shots),
-                            ),
-                            _filter(
-                                "Team",
-                                "team-filter",
-                                [
-                                    {"label": "All teams", "value": "all"},
-                                    *[
-                                        {"label": team, "value": team}
-                                        for team in sorted(
-                                            shots["team"].dropna().unique()
-                                        )
-                                    ],
-                                ],
-                            ),
-                            _filter(
-                                "Shot outcome",
-                                "shot-outcome-filter",
-                                [
-                                    {"label": "All outcomes", "value": "all"},
-                                    *[
-                                        {"label": outcome, "value": outcome}
-                                        for outcome in sorted(
-                                            shots["shot_outcome"].dropna().unique()
-                                        )
-                                    ],
-                                ],
-                            ),
-                            _filter(
-                                "Shot type",
-                                "shot-type-filter",
-                                [
-                                    {"label": "All shot types", "value": "all"},
-                                    *[
-                                        {"label": shot_type, "value": shot_type}
-                                        for shot_type in sorted(
-                                            shots["shot_type"].dropna().unique()
-                                        )
-                                    ],
-                                ],
-                            ),
-                        ],
-                        className="filter-grid",
-                    ),
-                ],
-                className="dashboard-section filter-section",
-            ),
-            html.Section(
-                [
-                    html.Div(
-                        [
-                            _metric_card(
-                                "TOTAL SHOTS",
-                                f"{total_shots:,}",
-                                "Attempts across both competitions",
-                                "total-shot-count",
-                            ),
-                            _metric_card(
-                                "TOTAL GOALS",
-                                f"{goals:,}",
-                                "Shots recorded as goals",
-                                "total-goal-count",
-                            ),
-                            _metric_card(
-                                "SHOT CONVERSION",
-                                f"{conversion_rate:.1f}%",
-                                "Goals ÷ total shots",
-                                "shot-conversion-rate",
-                            ),
-                            _metric_card(
-                                "MATCHES",
-                                f"{matches:,}",
-                                "Unique competition and match pairs",
-                                "match-count",
-                            ),
-                        ],
-                        className="metric-grid",
+                        className="league-kpi-grid",
                     )
                 ],
-                className="dashboard-section metrics-section",
+                className="dashboard-section league-kpi-section",
             ),
             html.Section(
                 [

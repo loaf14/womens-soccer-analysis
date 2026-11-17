@@ -301,15 +301,39 @@ def test_dash_layout_renders_dashboard_and_data_source(dashboard_shots):
     assert b"StatsBomb Open Data" in response.data
 
 
-def test_dashboard_metrics_use_goals_and_competition_match_pairs(dashboard_shots):
+def test_dashboard_has_independent_league_kpi_groups(dashboard_shots):
     app = create_app(dashboard_shots)
     response = app.server.test_client().get("/_dash-layout")
     components = dict(_components_by_id(response.get_json()))
 
-    assert components["total-shot-count"]["children"] == "5"
-    assert components["total-goal-count"]["children"] == "2"
-    assert components["shot-conversion-rate"]["children"] == "40.0%"
-    assert components["match-count"]["children"] == "4"
+    assert components["nwsl-kpi-group"]["className"] == "league-kpi-group nwsl"
+    assert components["wsl-kpi-group"]["className"] == "league-kpi-group wsl"
+    assert {
+        "nwsl-shots",
+        "nwsl-goals",
+        "nwsl-conversion-rate",
+        "nwsl-matches",
+        "nwsl-shots-per-match",
+        "wsl-shots",
+        "wsl-goals",
+        "wsl-conversion-rate",
+        "wsl-matches",
+        "wsl-shots-per-match",
+    }.issubset(components)
+    assert [components[f"nwsl-{metric}"]["children"] for metric in (
+        "shots",
+        "goals",
+        "conversion-rate",
+        "matches",
+        "shots-per-match",
+    )] == ["3", "1", "33.3%", "2", "1.5"]
+    assert [components[f"wsl-{metric}"]["children"] for metric in (
+        "shots",
+        "goals",
+        "conversion-rate",
+        "matches",
+        "shots-per-match",
+    )] == ["2", "1", "50.0%", "2", "1.0"]
 
 
 def test_shot_map_coverage_note_reports_outside_half_shots(dashboard_shots):
@@ -334,24 +358,24 @@ def test_shot_map_section_copy_does_not_claim_outside_half_shots_are_plotted(
     assert "every attempt across both leagues" not in layout
 
 
-def test_dashboard_filters_use_available_dataset_values(dashboard_shots):
+def test_dashboard_has_no_global_filter_controls_or_combined_kpis(dashboard_shots):
     app = create_app(dashboard_shots)
     response = app.server.test_client().get("/_dash-layout")
     components = dict(_components_by_id(response.get_json()))
 
-    competition_options = components["competition-filter"]["options"]
-    assert [(option["label"], option["value"]) for option in competition_options] == [
-        ("Both leagues", "all"),
-        ("NWSL", "nwsl"),
-        ("WSL", "wsl"),
-    ]
-
-    for component_id, expected in {
-        "team-filter": {"all", "London WFC", "NWSL City", "NWSL United"},
-        "shot-outcome-filter": {"all", "Blocked", "Goal", "Off T", "Saved"},
-        "shot-type-filter": {"all", "Corner", "Free Kick", "Open Play", "Penalty"},
-    }.items():
-        assert {option["value"] for option in components[component_id]["options"]} == expected
+    assert {
+        "competition-filter",
+        "team-filter",
+        "shot-outcome-filter",
+        "shot-type-filter",
+    }.isdisjoint(components)
+    assert {
+        "total-shot-count",
+        "total-goal-count",
+        "shot-conversion-rate",
+        "match-count",
+    }.isdisjoint(components)
+    assert "Explore the dataset" not in response.get_data(as_text=True)
 
 
 def test_dashboard_has_all_visualizations(dashboard_shots):
@@ -588,5 +612,5 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b".conversion-card .visualization-heading" in response.data
     assert b".play-pattern-chart" in response.data
     assert b".play-pattern-method-note" in response.data
-    assert b".dashboard-dropdown.is-focused .Select-control" in response.data
-    assert b".VirtualizedSelectSelectedOption" in response.data
+    assert b".league-kpi-grid" in response.data
+    assert b".league-kpi-metrics" in response.data
