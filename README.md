@@ -78,14 +78,13 @@ route; Render's free service does not provide persistent runtime storage.
 ### Data exposure and licensing note
 
 The Parquet file is not tracked by Git and the app has no route that serves it
-for download. Shot maps aggregate observations into 4-by-4-coordinate-unit bins
-before constructing Plotly figures: **Binned shots** shows goal and non-goal
-counts per bin, **Heatmap** shows total counts per bin, and **Hybrid** combines
-the total-count heatmap with aggregated goal counts. No shot IDs, player or team
-names, event-level locations, or event metadata are added to these traces.
-Nevertheless, even spatially aggregated counts may be governed by the User
-Agreement. Confirm that this visualization is permitted before making the
-service public; if not, obtain written permission or remove the affected data.
+for download. Section 01, **Where teams take their shots**, displays only 4-by-4-coordinate-
+unit heatmap bins of shot counts, with the same bin boundaries and shared color
+scale for both leagues. No mode selector, event-level markers, locations, or
+metadata are sent to the browser. Spatially aggregated counts may still be
+governed by the User Agreement; confirm that these visualizations are permitted
+before making the service public. If not, obtain written permission or remove
+the affected data.
 
 Render's free web services can spin down when idle, so the first request may
 take longer. The build re-fetches the source data on each new deploy; an upstream

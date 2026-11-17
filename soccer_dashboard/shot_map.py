@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import math
 from numbers import Real
-from typing import Literal
 
 import pandas as pd
 import plotly.graph_objects as go
-
-ShotMapMode = Literal["binned", "heatmap", "hybrid"]
 
 PITCH_LENGTH = 120
 PITCH_WIDTH = 80
@@ -21,8 +18,6 @@ SHOT_MAP_X_RANGE = (-30, 30)
 SHOT_MAP_Y_RANGE = (35, 63)
 SHOT_MAP_VIEW_STATSBOMB_X_RANGE = (95, 120)
 SHOT_MAP_VIEW_STATSBOMB_Y_RANGE = (10, 70)
-GOAL_COLOR = "#f0ad5e"
-SHOT_COLOR = "#a9b8e8"
 PITCH_LINE_COLOR = "#88a18f"
 HEATMAP_COLORS = [
     [0, "#10231b"],
@@ -79,10 +74,6 @@ def prepare_shot_coordinates(shots: pd.DataFrame) -> pd.DataFrame:
         & prepared["statsbomb_x"].between(*SHOT_MAP_VIEW_STATSBOMB_X_RANGE)
         & prepared["statsbomb_y"].between(*SHOT_MAP_VIEW_STATSBOMB_Y_RANGE)
     )
-    outcomes = prepared.get(
-        "shot_outcome", pd.Series(index=prepared.index, dtype="object")
-    )
-    prepared["is_goal"] = outcomes.eq("Goal").fillna(False).astype(bool)
     return prepared
 
 
@@ -197,29 +188,6 @@ def _pitch_arc_traces() -> list[go.Scatter]:
     ]
 
 
-def _binned_shot_counts(shots: pd.DataFrame) -> pd.DataFrame:
-    x_start = -HALF_PITCH_WIDTH / 2
-    x_bin_count = int(HALF_PITCH_WIDTH / DENSITY_BIN_SIZE)
-    y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
-    binned = shots.assign(
-        x_bin=((shots["map_x"] - x_start) / DENSITY_BIN_SIZE)
-        .astype(int)
-        .clip(upper=x_bin_count - 1),
-        y_bin=(shots["map_y"] / DENSITY_BIN_SIZE)
-        .astype(int)
-        .clip(upper=y_bin_count - 1),
-    )
-    counts = (
-        binned.groupby(["x_bin", "y_bin", "is_goal"], sort=True)
-        .size()
-        .rename("shot_count")
-        .reset_index()
-    )
-    counts["map_x"] = x_start + (counts["x_bin"] + 0.5) * DENSITY_BIN_SIZE
-    counts["map_y"] = (counts["y_bin"] + 0.5) * DENSITY_BIN_SIZE
-    return counts
-
-
 def _density_grid(
     shots: pd.DataFrame,
 ) -> tuple[list[float], list[float], list[list[int]], int]:
@@ -227,8 +195,10 @@ def _density_grid(
     x_bin_count = int(HALF_PITCH_WIDTH / DENSITY_BIN_SIZE)
     y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
     counts = [[0] * y_bin_count for _ in range(x_bin_count)]
-    for row in _binned_shot_counts(shots).itertuples(index=False):
-        counts[row.x_bin][row.y_bin] += row.shot_count
+    for x, y in zip(shots["map_x"], shots["map_y"], strict=True):
+        x_bin = min(int((x - x_start) / DENSITY_BIN_SIZE), x_bin_count - 1)
+        y_bin = min(int(y / DENSITY_BIN_SIZE), y_bin_count - 1)
+        counts[x_bin][y_bin] += 1
 
     x_centers = [
         x_start + (index + 0.5) * DENSITY_BIN_SIZE
@@ -293,70 +263,23 @@ def _add_density(
     )
 
 
-def _add_shot_markers(
-    fig: go.Figure, shots: pd.DataFrame, *, goals_only: bool
-) -> None:
-    binned_counts = _binned_shot_counts(shots)
-    if goals_only:
-        groups = [(True, "Goals", GOAL_COLOR, 11)]
-    else:
-        groups = [
-            (False, "Non-goals", SHOT_COLOR, 7),
-            (True, "Goals", GOAL_COLOR, 11),
-        ]
-
-    for is_goal, label, color, size in groups:
-        group = binned_counts.loc[binned_counts["is_goal"].eq(is_goal)]
-        fig.add_trace(
-            go.Scattergl(
-                x=group["map_x"],
-                y=group["map_y"],
-                mode="markers",
-                name=label,
-                marker={
-                    "color": color,
-                    "size": [
-                        size + min(12, 3 * math.sqrt(count))
-                        for count in group["shot_count"]
-                    ],
-                    "opacity": 0.86 if is_goal else 0.48,
-                    "line": {
-                        "color": "#f8f2e7" if is_goal else "rgba(0,0,0,0)",
-                        "width": 1 if is_goal else 0,
-                    },
-                },
-                customdata=[[int(count)] for count in group["shot_count"]],
-                hovertemplate=(
-                    f"{label} in 4-by-4-unit bin: "
-                    "%{customdata[0]:,.0f}<extra></extra>"
-                ),
-            )
-        )
-
-
 def create_shot_map(
     shots: pd.DataFrame,
-    mode: ShotMapMode = "hybrid",
     *,
     density_max: int | None = None,
 ) -> go.Figure:
-    """Create a binned-shot, shot-frequency, or hybrid attacking-half map.
+    """Create an attacking-half shot-frequency heatmap from aggregated bins.
 
-    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. Shot counts are aggregated
-    into 4-by-4 coordinate-unit bins over the attacking half before being added
-    to any trace. The axes focus the visible window on StatsBomb x=95..120 and
-    y=10..70. Heat intensity represents shot frequency, not scoring probability.
-    ``density_max`` can set a common color-scale maximum when comparing leagues.
+    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. The heatmap uses 4-by-4
+    coordinate-unit bins over the attacking half; its axes focus the visible
+    window on StatsBomb x=95..120 and y=10..70. Heat intensity represents shot
+    frequency, not scoring probability. ``density_max`` sets a common
+    color-scale maximum when comparing leagues.
     """
-    if mode not in {"binned", "heatmap", "hybrid"}:
-        raise ValueError(f"Unknown shot map mode: {mode!r}")
-
     prepared = prepare_shot_coordinates(shots)
     in_half = prepared.loc[prepared["in_attacking_half"]].copy()
     fig = go.Figure()
-
-    if mode in {"heatmap", "hybrid"}:
-        _add_density(fig, in_half, density_max)
+    _add_density(fig, in_half, density_max)
 
     fig.update_layout(
         shapes=pitch_shapes(),
@@ -399,15 +322,11 @@ def create_shot_map(
             "constrain": "domain",
             "zeroline": False,
         },
-        showlegend=mode != "heatmap",
+        showlegend=False,
         uirevision="shot-map-pitch",
     )
 
     for trace in _pitch_arc_traces():
         fig.add_trace(trace)
-    if mode == "binned":
-        _add_shot_markers(fig, in_half, goals_only=False)
-    elif mode == "hybrid":
-        _add_shot_markers(fig, in_half, goals_only=True)
 
     return fig

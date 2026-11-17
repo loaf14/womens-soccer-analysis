@@ -76,10 +76,6 @@ def shot_map_shots():
     )
 
 
-def _trace_by_name(figure, name):
-    return next(trace for trace in figure.data if trace.name == name)
-
-
 def test_coordinate_transform_preserves_orientation_and_lateral_axis(shot_map_shots):
     prepared = prepare_shot_coordinates(shot_map_shots)
 
@@ -137,32 +133,11 @@ def test_pitch_geometry_matches_statsbomb_half_pitch_dimensions():
     assert "Corner arcs" in {trace.name for trace in figure.data}
 
 
-def test_binned_mode_separates_goals_and_non_goals_without_event_rows(
-    shot_map_shots,
-):
-    figure = create_shot_map(shot_map_shots, mode="binned")
-    goals = _trace_by_name(figure, "Goals")
-    non_goals = _trace_by_name(figure, "Non-goals")
-
-    assert len(goals.x) == 2
-    assert len(non_goals.x) == 1
-    assert sum(row[0] for row in goals.customdata) == 2
-    assert sum(row[0] for row in non_goals.customdata) == 1
-    assert list(goals.x) == [-38.0, 2.0]
-    assert goals.marker.color == "#f0ad5e"
-    assert non_goals.marker.color == "#a9b8e8"
-    payload = figure.to_json()
-    assert "goal-central" not in payload
-    assert "Forward" not in payload
-    assert "NWSL City" not in payload
-    assert "108.0" not in payload
-
-
 def test_heatmap_uses_every_valid_shot_in_attacking_half_and_documented_bins(
     shot_map_shots,
 ):
-    figure = create_shot_map(shot_map_shots, mode="heatmap")
-    density = _trace_by_name(figure, "Shot frequency")
+    figure = create_shot_map(shot_map_shots)
+    density = figure.data[0]
 
     assert density.type == "heatmap"
     assert len(density.x) == 2 * 40 / DENSITY_BIN_SIZE
@@ -172,6 +147,8 @@ def test_heatmap_uses_every_valid_shot_in_attacking_half_and_documented_bins(
     assert density.colorbar.title.text == "Shot attempts per bin"
     assert len(density.colorscale) > 1
     assert sum(map(sum, density.z)) == 3
+    assert all(trace.type == "scatter" for trace in figure.data[1:])
+    assert not any(trace.type == "scattergl" for trace in figure.data)
 
 
 def test_density_max_can_be_shared_without_independent_normalization():
@@ -189,10 +166,10 @@ def test_density_max_can_be_shared_without_independent_normalization():
     )
     shared_max = max(max_shot_density(nwsl), max_shot_density(wsl))
 
-    nwsl_figure = create_shot_map(nwsl, mode="heatmap", density_max=shared_max)
-    wsl_figure = create_shot_map(wsl, mode="heatmap", density_max=shared_max)
-    nwsl_density = _trace_by_name(nwsl_figure, "Shot frequency")
-    wsl_density = _trace_by_name(wsl_figure, "Shot frequency")
+    nwsl_figure = create_shot_map(nwsl, density_max=shared_max)
+    wsl_figure = create_shot_map(wsl, density_max=shared_max)
+    nwsl_density = nwsl_figure.data[0]
+    wsl_density = wsl_figure.data[0]
 
     assert max_shot_density(nwsl) == 3
     assert max_shot_density(wsl) == 2
@@ -206,11 +183,10 @@ def test_density_max_can_be_shared_without_independent_normalization():
 
 def test_shared_density_max_rejects_a_scale_below_local_peak(shot_map_shots):
     with pytest.raises(ValueError, match="cannot be lower"):
-        create_shot_map(shot_map_shots, mode="heatmap", density_max=0)
+        create_shot_map(shot_map_shots, density_max=0)
 
 
-@pytest.mark.parametrize("mode", ["heatmap", "hybrid"])
-def test_density_bin_counts_conserve_attacking_half_shots_at_all_boundaries(mode):
+def test_density_bin_counts_conserve_attacking_half_shots_at_all_boundaries():
     shots = pd.DataFrame(
         {
             "location": [
@@ -226,7 +202,7 @@ def test_density_bin_counts_conserve_attacking_half_shots_at_all_boundaries(mode
         }
     )
     expected_count = int(prepare_shot_coordinates(shots)["in_attacking_half"].sum())
-    density = _trace_by_name(create_shot_map(shots, mode=mode), "Shot frequency")
+    density = create_shot_map(shots).data[0]
 
     assert sum(map(sum, density.z)) == expected_count == 5
     assert density.z[0][0] == 1
@@ -235,28 +211,8 @@ def test_density_bin_counts_conserve_attacking_half_shots_at_all_boundaries(mode
     assert density.z[-1][-1] == 1
 
 
-def test_hybrid_uses_same_all_shot_density_and_adds_only_goals(shot_map_shots):
-    heatmap = create_shot_map(shot_map_shots, mode="heatmap")
-    hybrid = create_shot_map(shot_map_shots, mode="hybrid")
-    heatmap_density = _trace_by_name(heatmap, "Shot frequency")
-    hybrid_density = _trace_by_name(hybrid, "Shot frequency")
-    goals = _trace_by_name(hybrid, "Goals")
-
-    assert [list(row) for row in hybrid_density.z] == [
-        list(row) for row in heatmap_density.z
-    ]
-    assert len(goals.x) == 2
-    assert "Non-goals" not in {trace.name for trace in hybrid.data}
-    assert list(hybrid.data).index(hybrid_density) < list(hybrid.data).index(goals)
-    assert sum(row[0] for row in goals.customdata) == 2
-    assert "Forward" not in hybrid.to_json()
-
-
-@pytest.mark.parametrize("mode", ["binned", "heatmap", "hybrid"])
-def test_serialized_modes_contain_only_aggregated_shot_data(
-    shot_map_shots, mode
-):
-    figure = create_shot_map(shot_map_shots, mode=mode)
+def test_heatmap_serialization_contains_only_aggregated_shot_data(shot_map_shots):
+    figure = create_shot_map(shot_map_shots)
     payload = json.loads(figure.to_json())
 
     for event_value in (
@@ -272,33 +228,19 @@ def test_serialized_modes_contain_only_aggregated_shot_data(
     ):
         assert event_value not in json.dumps(payload)
 
-    for trace in payload["data"]:
-        if trace.get("name") in {"Goals", "Non-goals"}:
-            assert trace["type"] == "scattergl"
-            assert trace["hovertemplate"].endswith("<extra></extra>")
-            assert "Player" not in trace["hovertemplate"]
-            assert "StatsBomb location" not in trace["hovertemplate"]
-            assert all(isinstance(row[0], int) for row in trace["customdata"])
+    assert [trace["type"] for trace in payload["data"]] == [
+        "heatmap",
+        "scatter",
+        "scatter",
+    ]
+    assert payload["data"][0]["hovertemplate"].startswith("Shot attempts: %{z}")
+    assert not any(
+        "customdata" in trace or trace.get("mode") == "markers"
+        for trace in payload["data"]
+    )
 
 
-def test_hybrid_is_default_mode(shot_map_shots):
-    figure = create_shot_map(shot_map_shots)
-
-    assert "Shot frequency" in {trace.name for trace in figure.data}
-    assert "Goals" in {trace.name for trace in figure.data}
-    assert "Non-goals" not in {trace.name for trace in figure.data}
-
-
-def test_binned_marker_hover_contains_only_aggregate_counts(shot_map_shots):
-    figure = create_shot_map(shot_map_shots, mode="binned")
-    non_goals = _trace_by_name(figure, "Non-goals")
-
-    assert [row[0] for row in non_goals.customdata] == [1]
-    assert "Non-goals in 4-by-4-unit bin" in non_goals.hovertemplate
-
-
-@pytest.mark.parametrize("mode", ["binned", "heatmap", "hybrid"])
-def test_empty_shots_produce_valid_empty_figures(mode):
+def test_empty_shots_produce_valid_empty_heatmap():
     empty_shots = pd.DataFrame(
         columns=[
             "location",
@@ -310,13 +252,11 @@ def test_empty_shots_produce_valid_empty_figures(mode):
         ]
     )
 
-    figure = create_shot_map(empty_shots, mode=mode)
+    figure = create_shot_map(empty_shots)
 
     assert figure.layout.shapes
-    if mode in {"heatmap", "hybrid"}:
-        assert sum(map(sum, _trace_by_name(figure, "Shot frequency").z)) == 0
-    if mode in {"binned", "hybrid"}:
-        assert len(_trace_by_name(figure, "Goals").x) == 0
+    assert sum(map(sum, figure.data[0].z)) == 0
+    assert not any(trace.type == "scattergl" for trace in figure.data)
 
 
 def test_outside_half_and_invalid_locations_are_counted_not_repositioned(
