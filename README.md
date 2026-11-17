@@ -39,11 +39,12 @@ Use `--expected-total 7059` to fail the build if the live source no longer
 matches it.
 
 The source is StatsBomb Open Data, retrieved via `statsbombpy`; data availability
-is determined by StatsBomb. Please credit [StatsBomb Open
-Data](https://github.com/statsbomb/open-data) when using the data. Generated
-Parquet data is local, gitignored, and is not included in the repository. If the
-cache is missing, run the build command above; the dashboard reports the
-regeneration command in its error message.
+is determined by StatsBomb. The StatsBomb Public Data User Agreement governs use:
+Section 1.2.1 prohibits redistribution of the underlying data, and Section 1.4
+requires the StatsBomb logo on published analysis. Please credit
+[StatsBomb Open Data](https://github.com/hudl/open-data) and retain the official
+logo in published dashboards. The prepared Parquet file is gitignored and is
+never placed in Dash's public `assets/` directory.
 
 ## Run the dashboard
 
@@ -54,6 +55,41 @@ python -m soccer_dashboard.app
 The app loads the local Parquet cache rather than making network requests during
 startup and displays the total shots across both seasons. The existing
 [`exploration.ipynb`](./exploration.ipynb) is retained unchanged.
+
+## Deploy on Render
+
+Create a **Web Service** from this repository, select the `feature/render-deployment`
+branch (or `main` after this change is reviewed and merged), and use:
+
+- **Build command:** `pip install . && python -m soccer_dashboard.build_data --expected-total 7059`
+- **Start command:** `gunicorn "soccer_dashboard.app:create_server()" --bind 0.0.0.0:$PORT --workers 1 --threads 4`
+- **Environment variables:** No custom variables are required. Render supplies
+  `PORT`; `.python-version` selects Python 3.12.
+
+The build command fetches the configured seasons directly from StatsBomb and
+creates `data/shots.parquet` inside the service build. The start command loads
+that prepared cache through the Gunicorn application factory; the application
+does not contact StatsBomb during startup. The count check intentionally fails
+the build if the upstream total changes from the current 7,059-shot baseline,
+so any updated data can be reviewed before deployment. The cache is rebuilt on
+each deploy, not each process start. It is not a public Dash asset or download
+route; Render's free service does not provide persistent runtime storage.
+
+### Data exposure and licensing note
+
+The Parquet file is not tracked by Git and the app has no route that serves it
+for download. Section 01, **Where teams take their shots**, displays only 4-by-4-coordinate-
+unit heatmap bins of shot counts, with the same bin boundaries and shared color
+scale for both leagues. No mode selector, event-level markers, locations, or
+metadata are sent to the browser. Spatially aggregated counts may still be
+governed by the User Agreement; confirm that these visualizations are permitted
+before making the service public. If not, obtain written permission or remove
+the affected data.
+
+Render's free web services can spin down when idle, so the first request may
+take longer. The build re-fetches the source data on each new deploy; an upstream
+availability change or a count change will make that build fail rather than
+silently deploying an unexpected dataset.
 
 ## Tests
 

@@ -4,12 +4,9 @@ from __future__ import annotations
 
 import math
 from numbers import Real
-from typing import Literal
 
 import pandas as pd
 import plotly.graph_objects as go
-
-ShotMapMode = Literal["individual", "heatmap", "hybrid"]
 
 PITCH_LENGTH = 120
 PITCH_WIDTH = 80
@@ -21,8 +18,6 @@ SHOT_MAP_X_RANGE = (-30, 30)
 SHOT_MAP_Y_RANGE = (35, 63)
 SHOT_MAP_VIEW_STATSBOMB_X_RANGE = (95, 120)
 SHOT_MAP_VIEW_STATSBOMB_Y_RANGE = (10, 70)
-GOAL_COLOR = "#f0ad5e"
-SHOT_COLOR = "#a9b8e8"
 PITCH_LINE_COLOR = "#88a18f"
 HEATMAP_COLORS = [
     [0, "#10231b"],
@@ -30,17 +25,6 @@ HEATMAP_COLORS = [
     [0.68, "#49bd70"],
     [1, "#c5edaf"],
 ]
-
-_TOOLTIP_FIELDS = (
-    ("Player", "player"),
-    ("Team", "team"),
-    ("Competition", "competition_name"),
-    ("Outcome", "shot_outcome"),
-    ("Shot type", "shot_type"),
-    ("Body part", "shot_body_part"),
-    ("Play pattern", "play_pattern"),
-)
-
 
 def _pitch_coordinates(location: object) -> tuple[float, float] | None:
     if isinstance(location, (str, bytes)) or not pd.api.types.is_list_like(location):
@@ -90,10 +74,6 @@ def prepare_shot_coordinates(shots: pd.DataFrame) -> pd.DataFrame:
         & prepared["statsbomb_x"].between(*SHOT_MAP_VIEW_STATSBOMB_X_RANGE)
         & prepared["statsbomb_y"].between(*SHOT_MAP_VIEW_STATSBOMB_Y_RANGE)
     )
-    outcomes = prepared.get(
-        "shot_outcome", pd.Series(index=prepared.index, dtype="object")
-    )
-    prepared["is_goal"] = outcomes.eq("Goal").fillna(False).astype(bool)
     return prepared
 
 
@@ -208,36 +188,6 @@ def _pitch_arc_traces() -> list[go.Scatter]:
     ]
 
 
-def _display_value(value: object) -> str:
-    if value is None or pd.isna(value):
-        return "Unknown"
-    text = str(value).strip()
-    return text if text else "Unknown"
-
-
-def _customdata(shots: pd.DataFrame) -> list[list[str]]:
-    return [
-        [
-            *[_display_value(row.get(column)) for _, column in _TOOLTIP_FIELDS],
-            f"{row['statsbomb_x']:.1f}",
-            f"{row['statsbomb_y']:.1f}",
-        ]
-        for _, row in shots.iterrows()
-    ]
-
-
-_SHOT_HOVER_TEMPLATE = (
-    "<b>%{customdata[0]}</b> · %{customdata[1]}<br>"
-    "%{customdata[2]}<br>"
-    "Outcome: %{customdata[3]}<br>"
-    "Shot type: %{customdata[4]}<br>"
-    "Body part: %{customdata[5]}<br>"
-    "Play pattern: %{customdata[6]}<br>"
-    "StatsBomb location: (%{customdata[7]}, %{customdata[8]})"
-    "<extra></extra>"
-)
-
-
 def _density_grid(
     shots: pd.DataFrame,
 ) -> tuple[list[float], list[float], list[list[int]], int]:
@@ -246,7 +196,6 @@ def _density_grid(
     y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
     counts = [[0] * y_bin_count for _ in range(x_bin_count)]
     for x, y in zip(shots["map_x"], shots["map_y"], strict=True):
-        # Clamp the maximum pitch edges into the final bins.
         x_bin = min(int((x - x_start) / DENSITY_BIN_SIZE), x_bin_count - 1)
         y_bin = min(int(y / DENSITY_BIN_SIZE), y_bin_count - 1)
         counts[x_bin][y_bin] += 1
@@ -314,64 +263,23 @@ def _add_density(
     )
 
 
-def _add_shot_markers(
-    fig: go.Figure, shots: pd.DataFrame, *, goals_only: bool
-) -> None:
-    if goals_only:
-        groups = [(True, "Goals", GOAL_COLOR, 11)]
-    else:
-        groups = [
-            (False, "Non-goals", SHOT_COLOR, 7),
-            (True, "Goals", GOAL_COLOR, 11),
-        ]
-
-    for is_goal, label, color, size in groups:
-        group = shots.loc[shots["is_goal"].eq(is_goal)]
-        fig.add_trace(
-            go.Scattergl(
-                x=group["map_x"],
-                y=group["map_y"],
-                mode="markers",
-                name=label,
-                marker={
-                    "color": color,
-                    "size": size,
-                    "opacity": 0.86 if is_goal else 0.48,
-                    "line": {
-                        "color": "#f8f2e7" if is_goal else "rgba(0,0,0,0)",
-                        "width": 1 if is_goal else 0,
-                    },
-                },
-                customdata=_customdata(group),
-                hovertemplate=_SHOT_HOVER_TEMPLATE,
-            )
-        )
-
-
 def create_shot_map(
     shots: pd.DataFrame,
-    mode: ShotMapMode = "hybrid",
     *,
     density_max: int | None = None,
 ) -> go.Figure:
-    """Create an individual, shot-frequency, or hybrid attacking-half map.
+    """Create an attacking-half shot-frequency heatmap from aggregated bins.
 
-    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. All shot data remains in
-    the figure traces and heatmap calculation; the axes focus the visible
-    window on StatsBomb x=95..120 and y=10..70. Density uses 4-by-4
-    coordinate-unit bins over the attacking half and represents shot
-    frequency, not scoring probability. ``density_max`` can set a common
-    color-scale maximum when comparing multiple league maps.
+    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. The heatmap uses 4-by-4
+    coordinate-unit bins over the attacking half; its axes focus the visible
+    window on StatsBomb x=95..120 and y=10..70. Heat intensity represents shot
+    frequency, not scoring probability. ``density_max`` sets a common
+    color-scale maximum when comparing leagues.
     """
-    if mode not in {"individual", "heatmap", "hybrid"}:
-        raise ValueError(f"Unknown shot map mode: {mode!r}")
-
     prepared = prepare_shot_coordinates(shots)
     in_half = prepared.loc[prepared["in_attacking_half"]].copy()
     fig = go.Figure()
-
-    if mode in {"heatmap", "hybrid"}:
-        _add_density(fig, in_half, density_max)
+    _add_density(fig, in_half, density_max)
 
     fig.update_layout(
         shapes=pitch_shapes(),
@@ -414,15 +322,11 @@ def create_shot_map(
             "constrain": "domain",
             "zeroline": False,
         },
-        showlegend=mode != "heatmap",
+        showlegend=False,
         uirevision="shot-map-pitch",
     )
 
     for trace in _pitch_arc_traces():
         fig.add_trace(trace)
-    if mode == "individual":
-        _add_shot_markers(fig, in_half, goals_only=False)
-    elif mode == "hybrid":
-        _add_shot_markers(fig, in_half, goals_only=True)
 
     return fig

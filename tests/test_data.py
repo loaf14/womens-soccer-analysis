@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from soccer_dashboard import data
-from soccer_dashboard.app import create_app
+from soccer_dashboard.app import create_app, create_server
 from soccer_dashboard.build_data import build_shots
 from soccer_dashboard.storage import load_local_shots
 
@@ -322,6 +322,51 @@ def test_dash_layout_renders_dashboard_and_data_source(dashboard_shots):
     assert response.status_code == 200
     assert b"The Anatomy of a Goal" in response.data
     assert b"StatsBomb Open Data" in response.data
+    layout = response.get_data(as_text=True)
+    assert "SHOT DISTRIBUTION" in layout
+    assert "Where teams take their shots" in layout
+    assert (
+        "Compare the spatial distribution and concentration of shot attempts "
+        "across leagues."
+    ) in layout
+    assert b"shot-map-view" not in response.data
+    assert b"Hybrid" not in response.data
+    assert b"Binned shots" not in response.data
+    assert b"Individual shots" not in response.data
+
+
+def test_gunicorn_factory_uses_prepared_data_without_api_requests(
+    dashboard_shots, monkeypatch
+):
+    load_calls = []
+
+    def load_prepared_shots():
+        load_calls.append(True)
+        return dashboard_shots
+
+    monkeypatch.setattr(
+        "soccer_dashboard.app.load_local_shots", load_prepared_shots
+    )
+    for method in ("competitions", "matches", "events"):
+        monkeypatch.setattr(
+            data.sb,
+            method,
+            lambda *args, **kwargs: pytest.fail(
+                f"Unexpected StatsBomb API request through {method}"
+            ),
+        )
+
+    server = create_server()
+    client = server.test_client()
+
+    assert load_calls == [True]
+    assert client.get("/_dash-layout").status_code == 200
+    dataset_url = client.get("/data/shots.parquet")
+    assert dataset_url.mimetype == "text/html"
+    assert not dataset_url.data.startswith(b"PAR1")
+    logo = client.get("/assets/statsbomb-logo.svg")
+    assert logo.status_code == 200
+    assert b"<svg" in logo.data
 
 
 def test_dashboard_has_independent_league_kpi_groups(dashboard_shots):
@@ -377,7 +422,17 @@ def test_shot_map_section_copy_does_not_claim_outside_half_shots_are_plotted(
     app = create_app(dashboard_shots)
     layout = app.server.test_client().get("/_dash-layout").get_data(as_text=True)
 
-    assert "Compare shot locations and outcomes across both leagues." in layout
+    assert "SHOT DISTRIBUTION" in layout
+    assert "Where teams take their shots" in layout
+    assert (
+        "Compare the spatial distribution and concentration of shot attempts "
+        "across leagues."
+    ) in layout
+    assert "Compare shot locations and outcomes across both leagues." not in layout
+    assert "shot-map-view" not in layout
+    assert "Hybrid" not in layout
+    assert "Binned shots" not in layout
+    assert "Individual shots" not in layout
     assert "every attempt across both leagues" not in layout
     assert '"children":"Compare shot locations"' not in layout
     assert "zoomed penalty-area view" not in layout
@@ -428,10 +483,23 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert "sankey-goals-graph" not in components
     assert "nwsl-shot-map-graph" in components
     assert "wsl-shot-map-graph" in components
+    assert "shot-map-view" not in components
+    assert not any(
+        "shot-map-graph.figure" in callback
+        for callback in app.callback_map
+    )
     assert components["nwsl-shot-map-graph"]["style"] == {"height": "360px"}
     assert components["wsl-shot-map-graph"]["style"] == {"height": "360px"}
     assert components["nwsl-shot-map-graph"]["figure"]["layout"]["height"] == 360
     assert components["wsl-shot-map-graph"]["figure"]["layout"]["height"] == 360
+    for graph_id in ("nwsl-shot-map-graph", "wsl-shot-map-graph"):
+        figure_traces = components[graph_id]["figure"]["data"]
+        assert [trace["type"] for trace in figure_traces] == [
+            "heatmap",
+            "scatter",
+            "scatter",
+        ]
+        assert not any(trace.get("mode") == "markers" for trace in figure_traces)
     assert {
         components["nwsl-shot-map-graph"]["figure"]["data"][0]["zmax"],
         components["wsl-shot-map-graph"]["figure"]["data"][0]["zmax"],
@@ -465,10 +533,6 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert "From Corner" not in wsl_sankey["node"]["label"]
     assert "From Free Kick" not in nwsl_sankey["node"]["label"]
     assert "From Free Kick" in wsl_sankey["node"]["label"]
-    assert components["shot-map-view"]["value"] == "hybrid"
-    assert {
-        option["value"] for option in components["shot-map-view"]["options"]
-    } == {"individual", "heatmap", "hybrid"}
     assert components["sankey-comparison-grid"]["className"] == (
         "sankey-comparison-grid"
     )
@@ -570,81 +634,6 @@ def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
         assert sum(all_trace["link"]["value"]) == 3 * shot_count
     assert all_result["nwsl-sankey-count"]["children"] == "3 shots represented"
     assert all_result["wsl-sankey-count"]["children"] == "2 shots represented"
-
-
-@pytest.mark.parametrize(
-    ("mode", "expected_traces", "expected_marker_counts", "expected_density_count"),
-    [
-        (
-            "individual",
-            {"Penalty arc", "Corner arcs", "Goals", "Non-goals"},
-            {"Goals": 1, "Non-goals": 1},
-            None,
-        ),
-        (
-            "heatmap",
-            {"Shot frequency", "Penalty arc", "Corner arcs"},
-            {},
-            2,
-        ),
-        (
-            "hybrid",
-            {"Shot frequency", "Penalty arc", "Corner arcs", "Goals"},
-            {"Goals": 1},
-            2,
-        ),
-    ],
-)
-def test_shot_map_view_callback_switches_figure(
-    dashboard_shots,
-    mode,
-    expected_traces,
-    expected_marker_counts,
-    expected_density_count,
-):
-    app = create_app(dashboard_shots)
-    callback_output = next(
-        key
-        for key in app.callback_map
-        if "nwsl-shot-map-graph.figure" in key
-    )
-    response = app.server.test_client().post(
-        "/_dash-update-component",
-        json={
-            "output": callback_output,
-            "outputs": [
-                {"id": "nwsl-shot-map-graph", "property": "figure"},
-                {"id": "wsl-shot-map-graph", "property": "figure"},
-            ],
-            "inputs": [
-                {"id": "shot-map-view", "property": "value", "value": mode}
-            ],
-            "state": [],
-            "changedPropIds": ["shot-map-view.value"],
-        },
-    )
-
-    assert response.status_code == 200
-    result = response.json["response"]
-    for league_id in ("nwsl-shot-map-graph", "wsl-shot-map-graph"):
-        figure = result[league_id]["figure"]
-        traces = {
-            trace["name"]: trace
-            for trace in figure["data"]
-            if trace.get("name")
-        }
-
-        assert set(traces) == expected_traces
-        for name, count in expected_marker_counts.items():
-            assert len(traces[name]["customdata"]) == count
-        if expected_density_count is not None:
-            density = traces["Shot frequency"]
-            assert sum(sum(row) for row in density["z"]) == expected_density_count
-
-    if expected_density_count is not None:
-        nwsl_density = result["nwsl-shot-map-graph"]["figure"]["data"][0]
-        wsl_density = result["wsl-shot-map-graph"]["figure"]["data"][0]
-        assert nwsl_density["zmax"] == wsl_density["zmax"]
 
 
 def test_season_chips_are_valid_direct_header_children(dashboard_shots):

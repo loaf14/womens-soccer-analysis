@@ -197,10 +197,17 @@ def create_app(shots: pd.DataFrame) -> Dash:
                 [
                     html.Div(
                         [
-                            html.P("01  /  SHOT LOCATION", className="section-kicker"),
-                            html.H2("Where shots become goals", className="section-title"),
                             html.P(
-                                "Compare shot locations and outcomes across both leagues.",
+                                "01  /  SHOT DISTRIBUTION",
+                                className="section-kicker",
+                            ),
+                            html.H2(
+                                "Where teams take their shots",
+                                className="section-title",
+                            ),
+                            html.P(
+                                "Compare the spatial distribution and concentration "
+                                "of shot attempts across leagues.",
                                 className="section-subtitle",
                             ),
                         ],
@@ -208,43 +215,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
                     ),
                     html.Section(
                         [
-                            html.Div(
-                                [
-                                    html.Div(
-                                        [
-                                            html.Label(
-                                                "MAP VIEW",
-                                                htmlFor="shot-map-view",
-                                                className="map-view-label",
-                                            ),
-                                            dcc.RadioItems(
-                                                id="shot-map-view",
-                                                options=[
-                                                    {
-                                                        "label": "Hybrid",
-                                                        "value": "hybrid",
-                                                    },
-                                                    {
-                                                        "label": "Individual shots",
-                                                        "value": "individual",
-                                                    },
-                                                    {
-                                                        "label": "Heatmap",
-                                                        "value": "heatmap",
-                                                    },
-                                                ],
-                                                value="hybrid",
-                                                inline=True,
-                                                className="shot-map-toggle",
-                                                labelClassName="shot-map-option",
-                                                inputClassName="shot-map-radio",
-                                            ),
-                                        ],
-                                        className="map-view-control",
-                                    ),
-                                ],
-                                className="shot-map-toolbar shot-map-toolbar-controls",
-                            ),
                             html.Div(
                                 [
                                     html.Section(
@@ -258,7 +228,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                 id="nwsl-shot-map-graph",
                                                 figure=create_shot_map(
                                                     league_shots["nwsl"],
-                                                    mode="hybrid",
                                                     density_max=shared_density_max,
                                                 ),
                                                 config={
@@ -282,7 +251,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                 id="wsl-shot-map-graph",
                                                 figure=create_shot_map(
                                                     league_shots["wsl"],
-                                                    mode="hybrid",
                                                     density_max=shared_density_max,
                                                 ),
                                                 config={
@@ -339,7 +307,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                             html.Label(
                                                 "SHOW",
                                                 htmlFor="sankey-mode",
-                                                className="map-view-label",
+                                                className="sankey-view-label",
                                             ),
                                             dcc.RadioItems(
                                                 id="sankey-mode",
@@ -533,7 +501,14 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         ]
                     ),
                     html.A(
-                        "StatsBomb Open Data repository ↗",
+                        [
+                            html.Img(
+                                src="/assets/statsbomb-logo.svg",
+                                alt="StatsBomb logo",
+                                className="statsbomb-logo",
+                            ),
+                            html.Span("StatsBomb Open Data repository ↗"),
+                        ],
                         href="https://github.com/statsbomb/open-data",
                         target="_blank",
                         rel="noreferrer",
@@ -545,21 +520,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
         ],
         className="dashboard-shell",
     )
-
-    @app.callback(
-        Output("nwsl-shot-map-graph", "figure"),
-        Output("wsl-shot-map-graph", "figure"),
-        Input("shot-map-view", "value"),
-    )
-    def update_shot_map(mode: str):
-        return (
-            create_shot_map(
-                league_shots["nwsl"], mode=mode, density_max=shared_density_max
-            ),
-            create_shot_map(
-                league_shots["wsl"], mode=mode, density_max=shared_density_max
-            ),
-        )
 
     @app.callback(
         Output("nwsl-sankey-graph", "figure"),
@@ -602,6 +562,11 @@ def create_app(shots: pd.DataFrame) -> Dash:
 def main() -> None:
     app = create_app(load_local_shots())
     app.run(debug=False)
+
+
+def create_server():
+    """Create the WSGI server for Gunicorn using the prepared local dataset."""
+    return create_app(load_local_shots()).server
 
 
 if __name__ == "__main__":
