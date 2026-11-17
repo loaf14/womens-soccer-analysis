@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from soccer_dashboard import data
-from soccer_dashboard.app import create_app
+from soccer_dashboard.app import create_app, create_server
 from soccer_dashboard.build_data import build_shots
 from soccer_dashboard.storage import load_local_shots
 
@@ -322,6 +322,40 @@ def test_dash_layout_renders_dashboard_and_data_source(dashboard_shots):
     assert response.status_code == 200
     assert b"The Anatomy of a Goal" in response.data
     assert b"StatsBomb Open Data" in response.data
+
+
+def test_gunicorn_factory_uses_prepared_data_without_api_requests(
+    dashboard_shots, monkeypatch
+):
+    load_calls = []
+
+    def load_prepared_shots():
+        load_calls.append(True)
+        return dashboard_shots
+
+    monkeypatch.setattr(
+        "soccer_dashboard.app.load_local_shots", load_prepared_shots
+    )
+    for method in ("competitions", "matches", "events"):
+        monkeypatch.setattr(
+            data.sb,
+            method,
+            lambda *args, **kwargs: pytest.fail(
+                f"Unexpected StatsBomb API request through {method}"
+            ),
+        )
+
+    server = create_server()
+    client = server.test_client()
+
+    assert load_calls == [True]
+    assert client.get("/_dash-layout").status_code == 200
+    dataset_url = client.get("/data/shots.parquet")
+    assert dataset_url.mimetype == "text/html"
+    assert not dataset_url.data.startswith(b"PAR1")
+    logo = client.get("/assets/statsbomb-logo.svg")
+    assert logo.status_code == 200
+    assert b"<svg" in logo.data
 
 
 def test_dashboard_has_independent_league_kpi_groups(dashboard_shots):

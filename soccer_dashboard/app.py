@@ -533,7 +533,14 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         ]
                     ),
                     html.A(
-                        "StatsBomb Open Data repository ↗",
+                        [
+                            html.Img(
+                                src="/assets/statsbomb-logo.svg",
+                                alt="StatsBomb logo",
+                                className="statsbomb-logo",
+                            ),
+                            html.Span("StatsBomb Open Data repository ↗"),
+                        ],
                         href="https://github.com/statsbomb/open-data",
                         target="_blank",
                         rel="noreferrer",
@@ -602,6 +609,11 @@ def create_app(shots: pd.DataFrame) -> Dash:
 def main() -> None:
     app = create_app(load_local_shots())
     app.run(debug=False)
+
+
+def create_server():
+    """Create the WSGI server for Gunicorn using the prepared local dataset."""
+    return create_app(load_local_shots()).server
 
 
 if __name__ == "__main__":

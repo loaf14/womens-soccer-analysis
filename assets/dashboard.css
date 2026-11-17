@@ -602,11 +602,20 @@ a {
 }
 
 .footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
   flex: 0 0 auto;
   color: #c5d5c9;
   font-size: 0.78rem;
   text-decoration-color: #53675a;
   text-underline-offset: 0.2rem;
+}
+
+.statsbomb-logo {
+  display: block;
+  width: 1.75rem;
+  height: 1.75rem;
 }
 
 .footer-link:hover {
