@@ -3,7 +3,10 @@ import pytest
 
 from soccer_dashboard.shot_map import (
     DENSITY_BIN_SIZE,
+    SHOT_MAP_X_RANGE,
+    SHOT_MAP_Y_RANGE,
     create_shot_map,
+    max_shot_density,
     pitch_shapes,
     prepare_shot_coordinates,
 )
@@ -122,7 +125,13 @@ def test_pitch_geometry_matches_statsbomb_half_pitch_dimensions():
 
     figure = create_shot_map(pd.DataFrame({"location": []}))
     assert figure.layout.yaxis.scaleanchor == "x"
+    assert tuple(figure.layout.xaxis.range) == SHOT_MAP_X_RANGE
+    assert tuple(figure.layout.yaxis.range) == SHOT_MAP_Y_RANGE
     assert figure.layout.yaxis.range[1] > figure.layout.yaxis.range[0]
+    figure_shapes = {shape.name: shape for shape in figure.layout.shapes}
+    for shape_name in ("goal", "penalty-area", "six-yard-box"):
+        assert figure_shapes[shape_name].y0 >= figure.layout.yaxis.range[0]
+        assert figure_shapes[shape_name].y1 <= figure.layout.yaxis.range[1]
     assert "Penalty arc" in {trace.name for trace in figure.data}
     assert "Corner arcs" in {trace.name for trace in figure.data}
 
@@ -156,6 +165,41 @@ def test_heatmap_uses_every_valid_shot_in_attacking_half_and_documented_bins(
     assert density.colorbar.title.text == "Shot attempts per bin"
     assert len(density.colorscale) > 1
     assert sum(map(sum, density.z)) == 3
+
+
+def test_density_max_can_be_shared_without_independent_normalization():
+    nwsl = pd.DataFrame(
+        {
+            "location": [[108.0, 40.0]] * 3 + [[45.0, 40.0], None],
+            "shot_outcome": ["Saved"] * 5,
+        }
+    )
+    wsl = pd.DataFrame(
+        {
+            "location": [[110.0, 42.0]] * 2,
+            "shot_outcome": ["Goal", "Saved"],
+        }
+    )
+    shared_max = max(max_shot_density(nwsl), max_shot_density(wsl))
+
+    nwsl_figure = create_shot_map(nwsl, mode="heatmap", density_max=shared_max)
+    wsl_figure = create_shot_map(wsl, mode="heatmap", density_max=shared_max)
+    nwsl_density = _trace_by_name(nwsl_figure, "Shot frequency")
+    wsl_density = _trace_by_name(wsl_figure, "Shot frequency")
+
+    assert max_shot_density(nwsl) == 3
+    assert max_shot_density(wsl) == 2
+    assert nwsl_density.zmax == wsl_density.zmax == 3
+    assert list(nwsl_density.x) == list(wsl_density.x)
+    assert list(nwsl_density.y) == list(wsl_density.y)
+    assert nwsl_density.colorscale == wsl_density.colorscale
+    assert sum(map(sum, nwsl_density.z)) == 3
+    assert sum(map(sum, wsl_density.z)) == 2
+
+
+def test_shared_density_max_rejects_a_scale_below_local_peak(shot_map_shots):
+    with pytest.raises(ValueError, match="cannot be lower"):
+        create_shot_map(shot_map_shots, mode="heatmap", density_max=0)
 
 
 @pytest.mark.parametrize("mode", ["heatmap", "hybrid"])
@@ -251,3 +295,16 @@ def test_outside_half_and_invalid_locations_are_counted_not_repositioned(
     assert len(mapped) == 3
     assert "outside-half" not in mapped["id"].tolist()
     assert "missing-location" not in mapped["id"].tolist()
+
+
+def test_zoomed_view_flags_outside_window_without_dropping_shot_rows(shot_map_shots):
+    prepared = prepare_shot_coordinates(shot_map_shots)
+
+    assert len(prepared) == len(shot_map_shots)
+    assert prepared["in_shot_map_view"].tolist() == [
+        True,
+        True,
+        False,
+        False,
+        False,
+    ]

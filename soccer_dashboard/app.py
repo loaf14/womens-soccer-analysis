@@ -6,7 +6,11 @@ import pandas as pd
 from dash import Dash, Input, Output, dcc, html
 
 from soccer_dashboard.sankey import create_sankey_figure
-from soccer_dashboard.shot_map import create_shot_map, prepare_shot_coordinates
+from soccer_dashboard.shot_map import (
+    create_shot_map,
+    max_shot_density,
+    prepare_shot_coordinates,
+)
 from soccer_dashboard.league_kpis import prepare_league_metrics
 from soccer_dashboard.shot_conversion import (
     create_conversion_figure,
@@ -84,19 +88,28 @@ def create_app(shots: pd.DataFrame) -> Dash:
     _, conversion_missing_locations = prepare_conversion_data(shots)
     play_pattern_figure = create_play_pattern_figure(shots)
     _, missing_play_patterns = prepare_play_pattern_data(shots)
-    map_shots = prepare_shot_coordinates(shots)
-    shots_outside_half = int(
-        (
-            map_shots["has_valid_location"]
-            & ~map_shots["in_attacking_half"]
-        ).sum()
-    )
-    shots_without_location = int((~map_shots["has_valid_location"]).sum())
-    map_coverage_note = (
-        "Half-pitch view: StatsBomb x=60–120, attacking toward the goal. "
-        f"Valid shots outside the attacking half (x < 60): {shots_outside_half:,}. "
-        "These are not plotted in this half-pitch view. "
-        f"Shot locations unavailable or invalid: {shots_without_location:,}."
+    league_shots = {
+        "nwsl": shots.loc[shots["competition_name"].eq("NWSL")].copy(),
+        "wsl": shots.loc[
+            shots["competition_name"].eq("FA Women's Super League")
+        ].copy(),
+    }
+    map_exclusion_counts = {}
+    for league, league_data in league_shots.items():
+        map_shots = prepare_shot_coordinates(league_data)
+        shots_outside_view = int(
+            (
+                map_shots["has_valid_location"]
+                & ~map_shots["in_shot_map_view"]
+            ).sum()
+        )
+        shots_without_location = int((~map_shots["has_valid_location"]).sum())
+        map_exclusion_counts[league] = {
+            "outside_view": shots_outside_view,
+            "unavailable_location": shots_without_location,
+        }
+    shared_density_max = max(
+        max_shot_density(league_data) for league_data in league_shots.values()
     )
 
     seasons = (
@@ -196,19 +209,6 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 [
                                     html.Div(
                                         [
-                                            html.H2(
-                                                "Interactive shot map",
-                                                className="section-title",
-                                            ),
-                                            html.P(
-                                                "Shot location, outcome, and "
-                                                "attacking patterns.",
-                                                className="section-subtitle",
-                                            ),
-                                        ]
-                                    ),
-                                    html.Div(
-                                        [
                                             html.Label(
                                                 "MAP VIEW",
                                                 htmlFor="shot-map-view",
@@ -240,27 +240,60 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                         className="map-view-control",
                                     ),
                                 ],
-                                className="shot-map-toolbar",
+                                className="shot-map-toolbar shot-map-toolbar-controls",
                             ),
-                            html.P(
-                                map_coverage_note,
-                                id="shot-map-coverage-note",
-                                className="map-coverage-note",
-                            ),
-                            html.P(
-                                "Heat intensity represents shot frequency, not "
-                                "scoring probability. Density bins are 4 × 4 "
-                                "StatsBomb coordinate units.",
-                                className="map-method-note",
-                            ),
-                            dcc.Graph(
-                                id="shot-map-graph",
-                                figure=create_shot_map(shots, mode="hybrid"),
-                                config={
-                                    "displayModeBar": False,
-                                    "responsive": True,
-                                },
-                                className="shot-map-graph",
+                            html.Div(
+                                [
+                                    html.Section(
+                                        [
+                                            html.H3(
+                                                "NWSL · 2023",
+                                                className="shot-map-league-title nwsl",
+                                                id="nwsl-shot-map-title",
+                                            ),
+                                            dcc.Graph(
+                                                id="nwsl-shot-map-graph",
+                                                figure=create_shot_map(
+                                                    league_shots["nwsl"],
+                                                    mode="hybrid",
+                                                    density_max=shared_density_max,
+                                                ),
+                                                config={
+                                                    "displayModeBar": False,
+                                                    "responsive": True,
+                                                },
+                                                style={"height": "360px"},
+                                                className="shot-map-graph",
+                                            ),
+                                        ],
+                                        className="shot-map-panel",
+                                    ),
+                                    html.Section(
+                                        [
+                                            html.H3(
+                                                "WSL · 2023/24",
+                                                className="shot-map-league-title wsl",
+                                                id="wsl-shot-map-title",
+                                            ),
+                                            dcc.Graph(
+                                                id="wsl-shot-map-graph",
+                                                figure=create_shot_map(
+                                                    league_shots["wsl"],
+                                                    mode="hybrid",
+                                                    density_max=shared_density_max,
+                                                ),
+                                                config={
+                                                    "displayModeBar": False,
+                                                    "responsive": True,
+                                                },
+                                                style={"height": "360px"},
+                                                className="shot-map-graph",
+                                            ),
+                                        ],
+                                        className="shot-map-panel",
+                                    ),
+                                ],
+                                className="shot-map-grid",
                             ),
                         ],
                         className="visualization-card shot-map-card",
@@ -512,11 +545,19 @@ def create_app(shots: pd.DataFrame) -> Dash:
     )
 
     @app.callback(
-        Output("shot-map-graph", "figure"),
+        Output("nwsl-shot-map-graph", "figure"),
+        Output("wsl-shot-map-graph", "figure"),
         Input("shot-map-view", "value"),
     )
     def update_shot_map(mode: str):
-        return create_shot_map(shots, mode=mode)
+        return (
+            create_shot_map(
+                league_shots["nwsl"], mode=mode, density_max=shared_density_max
+            ),
+            create_shot_map(
+                league_shots["wsl"], mode=mode, density_max=shared_density_max
+            ),
+        )
 
     @app.callback(
         Output("sankey-all-view", "style"),
