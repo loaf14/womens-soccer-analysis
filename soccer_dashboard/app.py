@@ -328,32 +328,43 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         [
                             html.Div(
                                 [
-                                    html.Label(
-                                        "SHOW",
-                                        htmlFor="sankey-mode",
-                                        className="map-view-label",
+                                    html.P(
+                                        "Link widths show shot counts; each league "
+                                        "diagram is scaled independently. Hover "
+                                        "percentages show the share of the source "
+                                        "category, not goal conversion rates.",
+                                        className="sankey-method-note",
                                     ),
-                                    dcc.RadioItems(
-                                        id="sankey-mode",
-                                        options=[
-                                            {"label": "All shots", "value": "all"},
-                                            {"label": "Goals only", "value": "goals"},
+                                    html.Div(
+                                        [
+                                            html.Label(
+                                                "SHOW",
+                                                htmlFor="sankey-mode",
+                                                className="map-view-label",
+                                            ),
+                                            dcc.RadioItems(
+                                                id="sankey-mode",
+                                                options=[
+                                                    {
+                                                        "label": "All shots",
+                                                        "value": "all",
+                                                    },
+                                                    {
+                                                        "label": "Goals only",
+                                                        "value": "goals",
+                                                    },
+                                                ],
+                                                value="all",
+                                                inline=True,
+                                                className="sankey-toggle",
+                                                labelClassName="shot-map-option",
+                                                inputClassName="shot-map-radio",
+                                            ),
                                         ],
-                                        value="all",
-                                        inline=True,
-                                        className="sankey-toggle",
-                                        labelClassName="shot-map-option",
-                                        inputClassName="shot-map-radio",
+                                        className="sankey-toolbar-controls",
                                     ),
                                 ],
-                                className="sankey-toolbar sankey-toolbar-controls",
-                            ),
-                            html.P(
-                                "Link widths show shot counts; each league diagram "
-                                "is scaled independently. Hover percentages show "
-                                "the share of the source category, not goal "
-                                "conversion rates.",
-                                className="sankey-method-note",
+                                className="sankey-toolbar",
                             ),
                             html.Div(
                                 [

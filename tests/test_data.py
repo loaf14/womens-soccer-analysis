@@ -87,6 +87,17 @@ def _components_by_id(node):
             yield from _components_by_id(value)
 
 
+def _nodes_by_class(node, class_name):
+    if isinstance(node, dict):
+        if node.get("props", {}).get("className") == class_name:
+            yield node
+        for value in node.values():
+            yield from _nodes_by_class(value, class_name)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _nodes_by_class(value, class_name)
+
+
 @pytest.fixture
 def statsbomb_responses(monkeypatch):
     competitions = pd.DataFrame(
@@ -647,6 +658,21 @@ def test_sankey_copy_describes_categorical_associations_and_denominator(
     assert "How attacks unfold" not in layout
 
 
+def test_sankey_toolbar_places_note_and_controls_in_one_row(dashboard_shots):
+    app = create_app(dashboard_shots)
+    layout = app.server.test_client().get("/_dash-layout").get_json()
+
+    toolbar = next(_nodes_by_class(layout, "sankey-toolbar"))
+    note, controls = toolbar["props"]["children"]
+
+    assert note["props"]["className"] == "sankey-method-note"
+    assert controls["props"]["className"] == "sankey-toolbar-controls"
+    assert [child["type"] for child in controls["props"]["children"]] == [
+        "Label",
+        "RadioItems",
+    ]
+
+
 def test_dashboard_stylesheet_is_served(dashboard_shots):
     app = create_app(dashboard_shots)
 
@@ -663,11 +689,21 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
         "  align-items: center;\n"
         "  justify-content: space-between;\n"
         "  gap: 1.5rem;\n"
+        "  margin-bottom: 0.75rem;\n"
         "  padding: 0;\n"
         "}"
     ) in stylesheet
+    assert ".sankey-toggle .shot-map-option {\n  gap: 0.5rem;\n}" in stylesheet
     assert b".sankey-toggle" in response.data
-    assert b"gap: 0.55rem;" in response.data
+    assert "  gap: 0.4rem;" in stylesheet
+    assert "@media (max-width: 900px)" in stylesheet
+    assert (
+        ".sankey-toolbar {\n"
+        "    align-items: stretch;\n"
+        "    flex-direction: column;\n"
+        "    gap: 0.75rem;\n"
+        "  }"
+    ) in stylesheet
     assert b".sankey-comparison-grid" in response.data
     assert b"@media (max-width: 1100px)" in response.data
     assert b"grid-template-columns: minmax(0, 1fr)" in response.data
