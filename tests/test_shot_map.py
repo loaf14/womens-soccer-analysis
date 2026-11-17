@@ -3,6 +3,8 @@ import pytest
 
 from soccer_dashboard.shot_map import (
     DENSITY_BIN_SIZE,
+    SHOT_MAP_X_RANGE,
+    SHOT_MAP_Y_RANGE,
     create_shot_map,
     max_shot_density,
     pitch_shapes,
@@ -123,7 +125,13 @@ def test_pitch_geometry_matches_statsbomb_half_pitch_dimensions():
 
     figure = create_shot_map(pd.DataFrame({"location": []}))
     assert figure.layout.yaxis.scaleanchor == "x"
+    assert tuple(figure.layout.xaxis.range) == SHOT_MAP_X_RANGE
+    assert tuple(figure.layout.yaxis.range) == SHOT_MAP_Y_RANGE
     assert figure.layout.yaxis.range[1] > figure.layout.yaxis.range[0]
+    figure_shapes = {shape.name: shape for shape in figure.layout.shapes}
+    for shape_name in ("goal", "penalty-area", "six-yard-box"):
+        assert figure_shapes[shape_name].y0 >= figure.layout.yaxis.range[0]
+        assert figure_shapes[shape_name].y1 <= figure.layout.yaxis.range[1]
     assert "Penalty arc" in {trace.name for trace in figure.data}
     assert "Corner arcs" in {trace.name for trace in figure.data}
 
@@ -287,3 +295,16 @@ def test_outside_half_and_invalid_locations_are_counted_not_repositioned(
     assert len(mapped) == 3
     assert "outside-half" not in mapped["id"].tolist()
     assert "missing-location" not in mapped["id"].tolist()
+
+
+def test_zoomed_view_flags_outside_window_without_dropping_shot_rows(shot_map_shots):
+    prepared = prepare_shot_coordinates(shot_map_shots)
+
+    assert len(prepared) == len(shot_map_shots)
+    assert prepared["in_shot_map_view"].tolist() == [
+        True,
+        True,
+        False,
+        False,
+        False,
+    ]

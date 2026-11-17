@@ -348,7 +348,7 @@ def test_dashboard_has_independent_league_kpi_groups(dashboard_shots):
     )
 
 
-def test_shot_map_coverage_notes_report_exclusions_per_league(dashboard_shots):
+def test_shot_map_coverage_notes_report_view_exclusions_per_league(dashboard_shots):
     app = create_app(dashboard_shots)
     components = dict(
         _components_by_id(app.server.test_client().get("/_dash-layout").get_json())
@@ -356,11 +356,15 @@ def test_shot_map_coverage_notes_report_exclusions_per_league(dashboard_shots):
 
     nwsl_note = components["nwsl-map-coverage-note"]["children"]
     wsl_note = components["wsl-map-coverage-note"]["children"]
-    assert "Valid shots outside the attacking half (x < 60): 1; not plotted." in (
+    assert "StatsBomb x=95–120 and y=10–70" in nwsl_note
+    assert "goal margin extends beyond x=120." in nwsl_note
+    assert "Valid shots outside this window: 1; not shown." in (
         nwsl_note
     )
     assert "Shot locations unavailable or invalid: 0." in nwsl_note
-    assert "Valid shots outside the attacking half (x < 60): 0; not plotted." in (
+    assert "StatsBomb x=95–120 and y=10–70" in wsl_note
+    assert "goal margin extends beyond x=120." in wsl_note
+    assert "Valid shots outside this window: 1; not shown." in (
         wsl_note
     )
     assert "Shot locations unavailable or invalid: 0." in wsl_note
@@ -419,10 +423,10 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert "sankey-goals-graph" in components
     assert "nwsl-shot-map-graph" in components
     assert "wsl-shot-map-graph" in components
-    assert components["nwsl-shot-map-graph"]["style"] == {"height": "500px"}
-    assert components["wsl-shot-map-graph"]["style"] == {"height": "500px"}
-    assert components["nwsl-shot-map-graph"]["figure"]["layout"]["height"] == 500
-    assert components["wsl-shot-map-graph"]["figure"]["layout"]["height"] == 500
+    assert components["nwsl-shot-map-graph"]["style"] == {"height": "360px"}
+    assert components["wsl-shot-map-graph"]["style"] == {"height": "360px"}
+    assert components["nwsl-shot-map-graph"]["figure"]["layout"]["height"] == 360
+    assert components["wsl-shot-map-graph"]["figure"]["layout"]["height"] == 360
     assert {
         components["nwsl-shot-map-graph"]["figure"]["data"][0]["zmax"],
         components["wsl-shot-map-graph"]["figure"]["data"][0]["zmax"],

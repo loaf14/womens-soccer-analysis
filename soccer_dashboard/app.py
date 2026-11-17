@@ -97,17 +97,17 @@ def create_app(shots: pd.DataFrame) -> Dash:
     map_coverage_notes = {}
     for league, league_data in league_shots.items():
         map_shots = prepare_shot_coordinates(league_data)
-        shots_outside_half = int(
+        shots_outside_view = int(
             (
                 map_shots["has_valid_location"]
-                & ~map_shots["in_attacking_half"]
+                & ~map_shots["in_shot_map_view"]
             ).sum()
         )
         shots_without_location = int((~map_shots["has_valid_location"]).sum())
         map_coverage_notes[league] = (
-            "Half-pitch view: StatsBomb x=60–120, attacking toward the goal. "
-            f"Valid shots outside the attacking half (x < 60): "
-            f"{shots_outside_half:,}; not plotted. "
+            "Focused view: StatsBomb x=95–120 and y=10–70; goal margin "
+            "extends beyond x=120. "
+            f"Valid shots outside this window: {shots_outside_view:,}; not shown. "
             f"Shot locations unavailable or invalid: {shots_without_location:,}."
         )
     shared_density_max = max(
@@ -216,8 +216,8 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                 className="section-title",
                                             ),
                                             html.P(
-                                                "NWSL and WSL attempts shown on "
-                                                "the same attacking-half pitch.",
+                                                "NWSL and WSL shots share a zoomed "
+                                                "penalty-area view.",
                                                 className="section-subtitle",
                                             ),
                                         ]
@@ -290,7 +290,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                     "displayModeBar": False,
                                                     "responsive": True,
                                                 },
-                                                style={"height": "500px"},
+                                                style={"height": "360px"},
                                                 className="shot-map-graph",
                                             ),
                                         ],
@@ -319,7 +319,7 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                     "displayModeBar": False,
                                                     "responsive": True,
                                                 },
-                                                style={"height": "500px"},
+                                                style={"height": "360px"},
                                                 className="shot-map-graph",
                                             ),
                                         ],

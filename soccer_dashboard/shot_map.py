@@ -17,6 +17,10 @@ HALF_PITCH_START_X = 60
 HALF_PITCH_LENGTH = PITCH_LENGTH - HALF_PITCH_START_X
 HALF_PITCH_WIDTH = PITCH_WIDTH
 DENSITY_BIN_SIZE = 4
+SHOT_MAP_X_RANGE = (-30, 30)
+SHOT_MAP_Y_RANGE = (35, 63)
+SHOT_MAP_VIEW_STATSBOMB_X_RANGE = (95, 120)
+SHOT_MAP_VIEW_STATSBOMB_Y_RANGE = (10, 70)
 GOAL_COLOR = "#f0ad5e"
 SHOT_COLOR = "#a9b8e8"
 PITCH_LINE_COLOR = "#88a18f"
@@ -62,9 +66,10 @@ def _pitch_coordinates(location: object) -> tuple[float, float] | None:
 def prepare_shot_coordinates(shots: pd.DataFrame) -> pd.DataFrame:
     """Copy shots and add transformed map coordinates and coverage flags.
 
-    The attacking half is StatsBomb x=60..120. Map x is the original lateral
-    coordinate centered at zero; map y is the original x coordinate offset by
-    60, so attacks toward x=120 point upward on the chart.
+    Map x is the original lateral coordinate centered at zero; map y is the
+    original x coordinate offset by 60, so attacks toward x=120 point upward.
+    Shot observations inside the focused visible window are at StatsBomb
+    x=95..120 and y=10..70; extra axis margin shows the goal beyond x=120.
     """
     if "location" not in shots.columns:
         raise ValueError("Shot data must include a 'location' column")
@@ -79,6 +84,11 @@ def prepare_shot_coordinates(shots: pd.DataFrame) -> pd.DataFrame:
     prepared["in_attacking_half"] = (
         prepared["has_valid_location"]
         & prepared["statsbomb_x"].ge(HALF_PITCH_START_X)
+    )
+    prepared["in_shot_map_view"] = (
+        prepared["has_valid_location"]
+        & prepared["statsbomb_x"].between(*SHOT_MAP_VIEW_STATSBOMB_X_RANGE)
+        & prepared["statsbomb_y"].between(*SHOT_MAP_VIEW_STATSBOMB_Y_RANGE)
     )
     outcomes = prepared.get(
         "shot_outcome", pd.Series(index=prepared.index, dtype="object")
@@ -346,13 +356,12 @@ def create_shot_map(
 ) -> go.Figure:
     """Create an individual, shot-frequency, or hybrid attacking-half map.
 
-    The attacking-half view maps StatsBomb ``(x, y)`` to ``(y - 40, x - 60)``.
-    Valid shots with ``x < 60`` and shots with unavailable/invalid locations
-    are not silently included or repositioned; the dashboard reports these
-    counts in its coverage note. Density uses 4-by-4 coordinate-unit histogram
-    bins and represents shot frequency, not scoring probability. The upper
-    pitch boundaries are included in the final bins. ``density_max`` can set
-    a common color-scale maximum when comparing multiple league maps.
+    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. All shot data remains in
+    the figure traces and heatmap calculation; the axes focus the visible
+    window on StatsBomb x=95..120 and y=10..70. Density uses 4-by-4
+    coordinate-unit bins over the attacking half and represents shot
+    frequency, not scoring probability. ``density_max`` can set a common
+    color-scale maximum when comparing multiple league maps.
     """
     if mode not in {"individual", "heatmap", "hybrid"}:
         raise ValueError(f"Unknown shot map mode: {mode!r}")
@@ -371,7 +380,7 @@ def create_shot_map(
         plot_bgcolor="#14251c",
         font={"family": "DM Sans, Segoe UI, sans-serif", "color": "#f0f3ed"},
         margin={"l": 24, "r": 30, "t": 28, "b": 24},
-        height=500,
+        height=360,
         autosize=True,
         hoverlabel={
             "bgcolor": "#111a17",
@@ -390,14 +399,14 @@ def create_shot_map(
             "font": {"color": "#dce6dd", "size": 12},
         },
         xaxis={
-            "range": [-41, 41],
+            "range": list(SHOT_MAP_X_RANGE),
             "visible": False,
             "fixedrange": True,
             "constrain": "domain",
             "zeroline": False,
         },
         yaxis={
-            "range": [0, 62],
+            "range": list(SHOT_MAP_Y_RANGE),
             "visible": False,
             "fixedrange": True,
             "scaleanchor": "x",
