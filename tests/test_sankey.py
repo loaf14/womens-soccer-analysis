@@ -1,7 +1,10 @@
 import pandas as pd
 import pytest
 
-from soccer_dashboard.sankey import create_sankey_figure
+from soccer_dashboard.sankey import (
+    create_sankey_figure,
+    sankey_category_orders,
+)
 
 
 @pytest.fixture
@@ -288,6 +291,53 @@ def test_rare_play_patterns_are_grouped_without_dropping_observations():
         "Inside box",
     ) == 1
     assert _transition_total(trace, "Play pattern", "Shot location") == len(shots)
+
+
+def test_shared_category_orders_align_league_categories_without_inventing_nodes():
+    nwsl = pd.DataFrame(
+        {
+            "play_pattern": ["Regular Play", "From Corner", "Regular Play"],
+            "in_box": [True, True, False],
+            "shot_body_part": ["Right Foot", "Head", "Left Foot"],
+            "shot_outcome": ["Goal", "Saved", "Blocked"],
+        }
+    )
+    wsl = pd.DataFrame(
+        {
+            "play_pattern": ["Regular Play", "From Free Kick"],
+            "in_box": [True, False],
+            "shot_body_part": ["Right Foot", "Head"],
+            "shot_outcome": ["Goal", "Saved"],
+        }
+    )
+    orders = sankey_category_orders({"nwsl": nwsl, "wsl": wsl})
+    nwsl_trace = _sankey(
+        create_sankey_figure(nwsl, category_orders=orders)
+    )
+    wsl_trace = _sankey(
+        create_sankey_figure(wsl, category_orders=orders)
+    )
+
+    def stage_labels(trace, stage):
+        return [
+            label
+            for node_stage, label in zip(
+                trace.node.customdata, trace.node.label, strict=True
+            )
+            if node_stage == stage
+        ]
+
+    nwsl_patterns = stage_labels(nwsl_trace, "Play pattern")
+    wsl_patterns = stage_labels(wsl_trace, "Play pattern")
+    shared_patterns = set(nwsl_patterns) & set(wsl_patterns)
+
+    assert [label for label in nwsl_patterns if label in shared_patterns] == [
+        label for label in wsl_patterns if label in shared_patterns
+    ]
+    assert "From Corner" in nwsl_patterns
+    assert "From Corner" not in wsl_patterns
+    assert "From Free Kick" not in nwsl_patterns
+    assert "From Free Kick" in wsl_patterns
 
 
 def test_empty_dataset_returns_empty_sankey_trace():

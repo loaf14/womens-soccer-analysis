@@ -402,8 +402,10 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     )
     assert "shot-conversion-placeholder" not in components
     assert "shot-conversion-chart" in components
-    assert "sankey-all-graph" in components
-    assert "sankey-goals-graph" in components
+    assert "nwsl-sankey-graph" in components
+    assert "wsl-sankey-graph" in components
+    assert "sankey-all-graph" not in components
+    assert "sankey-goals-graph" not in components
     assert "nwsl-shot-map-graph" in components
     assert "wsl-shot-map-graph" in components
     assert components["nwsl-shot-map-graph"]["style"] == {"height": "360px"}
@@ -420,22 +422,38 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert {
         option["value"] for option in components["sankey-mode"]["options"]
     } == {"all", "goals"}
-    assert components["sankey-observation-count"]["children"] == (
-        f"{len(dashboard_shots):,} shots represented"
-    )
-    sankey_figure = components["sankey-all-graph"]["figure"]
-    assert sankey_figure["data"][0]["type"] == "sankey"
-    assert sum(sankey_figure["data"][0]["link"]["value"]) == 3 * len(
-        dashboard_shots
-    )
+    assert components["nwsl-sankey-count"]["children"] == "3 shots represented"
+    assert components["wsl-sankey-count"]["children"] == "2 shots represented"
+    assert components["nwsl-sankey-title"]["children"] == "NWSL · 2023"
+    assert components["wsl-sankey-title"]["children"] == "WSL · 2023/24"
+    assert components["nwsl-sankey-graph"]["style"] == {"height": "500px"}
+    assert components["wsl-sankey-graph"]["style"] == {"height": "500px"}
+    nwsl_sankey = components["nwsl-sankey-graph"]["figure"]["data"][0]
+    wsl_sankey = components["wsl-sankey-graph"]["figure"]["data"][0]
+    for trace, shot_count in ((nwsl_sankey, 3), (wsl_sankey, 2)):
+        assert trace["type"] == "sankey"
+        assert sum(trace["link"]["value"]) == 3 * shot_count
+        assert "Source category" in trace["link"]["hovertemplate"]
+        assert "Source category total" in trace["link"]["hovertemplate"]
+        assert list(dict.fromkeys(trace["node"]["customdata"])) == [
+            "Play pattern",
+            "Shot location",
+            "Body part",
+            "Outcome",
+        ]
+    assert "From Corner" in nwsl_sankey["node"]["label"]
+    assert "From Corner" not in wsl_sankey["node"]["label"]
+    assert "From Free Kick" not in nwsl_sankey["node"]["label"]
+    assert "From Free Kick" in wsl_sankey["node"]["label"]
     assert components["shot-map-view"]["value"] == "hybrid"
     assert {
         option["value"] for option in components["shot-map-view"]["options"]
     } == {"individual", "heatmap", "hybrid"}
-    assert components["sankey-goals-view"]["style"] == {"display": "none"}
-    assert set(
-        components["sankey-goals-graph"]["figure"]["data"][0]["node"]["customdata"]
-    ) == {"Play pattern", "Shot location", "Body part"}
+    assert components["sankey-comparison-grid"]["className"] == (
+        "sankey-comparison-grid"
+    )
+    assert components["nwsl-sankey-graph"]["config"]["responsive"] is True
+    assert components["wsl-sankey-graph"]["config"]["responsive"] is True
     conversion_figure = components["shot-conversion-chart"]["figure"]
     assert components["shot-conversion-chart"]["style"] == {"height": "260px"}
     assert components["shot-conversion-chart"]["responsive"] is True
@@ -466,13 +484,13 @@ def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
     callback_output = next(
         key
         for key in app.callback_map
-        if "sankey-all-view.style" in key
+        if "nwsl-sankey-graph.figure" in key
     )
     outputs = [
-        {"id": "sankey-all-view", "property": "style"},
-        {"id": "sankey-goals-view", "property": "style"},
-        {"id": "sankey-observation-count", "property": "children"},
-        {"id": "sankey-mode-description", "property": "children"},
+        {"id": "nwsl-sankey-graph", "property": "figure"},
+        {"id": "wsl-sankey-graph", "property": "figure"},
+        {"id": "nwsl-sankey-count", "property": "children"},
+        {"id": "wsl-sankey-count", "property": "children"},
     ]
 
     def select_mode(mode):
@@ -490,40 +508,35 @@ def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
         return response.get_json()["response"]
 
     goals_result = select_mode("goals")
-    goal_figure = app.server.test_client().get("/_dash-layout").get_json()
-    goal_components = dict(_components_by_id(goal_figure))
-    goal_figure = goal_components["sankey-goals-graph"]["figure"]["data"][0]
-    assert goals_result["sankey-all-view"]["style"] == {"display": "none"}
-    assert goals_result["sankey-goals-view"]["style"] == {"display": "block"}
-    assert set(goal_figure["node"]["customdata"]) == {
-        "Play pattern",
-        "Shot location",
-        "Body part",
-    }
-    assert goals_result["sankey-observation-count"]["children"] == "2 goals represented"
-    assert "goals only" in goals_result["sankey-mode-description"]["children"]
-    assert "not be compared as absolute counts" in goals_result[
-        "sankey-mode-description"
-    ]["children"]
-    assert sum(goal_figure["link"]["value"]) == 2 * 2
+    for graph_id, shot_count in (
+        ("nwsl-sankey-graph", 1),
+        ("wsl-sankey-graph", 1),
+    ):
+        goal_trace = goals_result[graph_id]["figure"]["data"][0]
+        assert list(dict.fromkeys(goal_trace["node"]["customdata"])) == [
+            "Play pattern",
+            "Shot location",
+            "Body part",
+        ]
+        assert sum(goal_trace["link"]["value"]) == 2 * shot_count
+    assert goals_result["nwsl-sankey-count"]["children"] == "1 goals represented"
+    assert goals_result["wsl-sankey-count"]["children"] == "1 goals represented"
 
     all_result = select_mode("all")
-    all_components = dict(
-        _components_by_id(app.server.test_client().get("/_dash-layout").get_json())
-    )
-    all_figure = all_components["sankey-all-graph"]["figure"]["data"][0]
-    assert all_result["sankey-all-view"]["style"] == {"display": "block"}
-    assert all_result["sankey-goals-view"]["style"] == {"display": "none"}
-    assert set(all_figure["node"]["customdata"]) == {
-        "Play pattern",
-        "Shot location",
-        "Body part",
-        "Outcome",
-    }
-    assert all_result["sankey-observation-count"]["children"] == (
-        f"{len(dashboard_shots):,} shots represented"
-    )
-    assert sum(all_figure["link"]["value"]) == 3 * len(dashboard_shots)
+    for graph_id, shot_count in (
+        ("nwsl-sankey-graph", 3),
+        ("wsl-sankey-graph", 2),
+    ):
+        all_trace = all_result[graph_id]["figure"]["data"][0]
+        assert list(dict.fromkeys(all_trace["node"]["customdata"])) == [
+            "Play pattern",
+            "Shot location",
+            "Body part",
+            "Outcome",
+        ]
+        assert sum(all_trace["link"]["value"]) == 3 * shot_count
+    assert all_result["nwsl-sankey-count"]["children"] == "3 shots represented"
+    assert all_result["wsl-sankey-count"]["children"] == "2 shots represented"
 
 
 @pytest.mark.parametrize(
@@ -624,11 +637,12 @@ def test_sankey_copy_describes_categorical_associations_and_denominator(
     layout = app.server.test_client().get("/_dash-layout").get_data(as_text=True)
 
     assert "How shot characteristics connect" in layout
-    assert "play pattern, shot location, body part, and outcome" in layout
-    assert "not goal conversion rates" in layout
-    assert "Play patterns and body parts below 1% are grouped as Other" in layout
-    assert "Missing outcomes are shown as Unknown" in layout
-    assert "Link widths are rescaled between modes" in layout
+    assert "Compare shot patterns and outcomes between the NWSL and WSL" in layout
+    assert "Link widths show shot counts" in layout
+    assert "each league diagram is scaled independently" in layout
+    assert "share of the source category, not goal conversion rates" in layout
+    assert "Play patterns and body parts below 1% are grouped as Other" not in layout
+    assert "Missing outcomes are shown as Unknown" not in layout
     assert "actions leading to a shot" not in layout
     assert "How attacks unfold" not in layout
 
@@ -643,6 +657,10 @@ def test_dashboard_stylesheet_is_served(dashboard_shots):
     assert b".sankey-graph" in response.data
     assert b".sankey-graph .svg-container" in response.data
     assert b".sankey-toggle" in response.data
+    assert b".sankey-comparison-grid" in response.data
+    assert b"@media (max-width: 1100px)" in response.data
+    assert b"grid-template-columns: minmax(0, 1fr)" in response.data
+    assert b".sankey-league-panel" in response.data
     assert b".conversion-chart" in response.data
     assert b".conversion-card .visualization-heading" in response.data
     assert b".play-pattern-chart" in response.data

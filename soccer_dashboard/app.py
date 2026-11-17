@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 from dash import Dash, Input, Output, dcc, html
 
-from soccer_dashboard.sankey import create_sankey_figure
+from soccer_dashboard.sankey import create_sankey_figure, sankey_category_orders
 from soccer_dashboard.shot_map import (
     create_shot_map,
     max_shot_density,
@@ -82,7 +82,6 @@ def _league_kpi_group(
 
 def create_app(shots: pd.DataFrame) -> Dash:
     """Create the dashboard using an already loaded shot dataset."""
-    total_shots = len(shots)
     league_metrics = prepare_league_metrics(shots).set_index("competition_name")
     conversion_figure = create_conversion_figure(shots)
     _, conversion_missing_locations = prepare_conversion_data(shots)
@@ -111,6 +110,10 @@ def create_app(shots: pd.DataFrame) -> Dash:
     shared_density_max = max(
         max_shot_density(league_data) for league_data in league_shots.values()
     )
+    sankey_orders = {
+        mode: sankey_category_orders(league_shots, mode=mode)
+        for mode in ("all", "goals")
+    }
 
     seasons = (
         shots[["competition_name", "season_name"]]
@@ -314,13 +317,8 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                 className="section-title",
                             ),
                             html.P(
-                                "Categorical associations across play pattern, "
-                                "shot location, body part, and outcome. Stages "
-                                "show associations, not a sequence or cause. "
-                                "Hover percentages are source-category shares, "
-                                "not goal conversion rates. Missing outcomes "
-                                "are shown as Unknown. Play patterns and body "
-                                "parts below 1% are grouped as Other.",
+                                "Compare shot patterns and outcomes between "
+                                "the NWSL and WSL.",
                                 className="section-subtitle",
                             ),
                         ],
@@ -330,82 +328,96 @@ def create_app(shots: pd.DataFrame) -> Dash:
                         [
                             html.Div(
                                 [
-                                    html.Div(
-                                        [
-                                            html.Label(
-                                                "SHOW",
-                                                htmlFor="sankey-mode",
-                                                className="map-view-label",
-                                            ),
-                                            dcc.RadioItems(
-                                                id="sankey-mode",
-                                                options=[
-                                                    {
-                                                        "label": "All shots",
-                                                        "value": "all",
-                                                    },
-                                                    {
-                                                        "label": "Goals only",
-                                                        "value": "goals",
-                                                    },
-                                                ],
-                                                value="all",
-                                                inline=True,
-                                                className="sankey-toggle",
-                                                labelClassName="shot-map-option",
-                                                inputClassName="shot-map-radio",
-                                            ),
-                                        ],
-                                        className="map-view-control",
+                                    html.Label(
+                                        "SHOW",
+                                        htmlFor="sankey-mode",
+                                        className="map-view-label",
                                     ),
-                                    html.Div(
-                                        [
-                                            html.P(
-                                                f"{total_shots:,} shots represented",
-                                                id="sankey-observation-count",
-                                                className="sankey-observation-count",
-                                                **{"aria-live": "polite"},
-                                            ),
-                                            html.P(
-                                                "Showing all shots across both "
-                                                "leagues. Link widths are rescaled "
-                                                "between modes and should not be "
-                                                "compared as absolute counts.",
-                                                id="sankey-mode-description",
-                                                className="sankey-mode-description",
-                                                role="status",
-                                                **{"aria-live": "polite"},
-                                            ),
+                                    dcc.RadioItems(
+                                        id="sankey-mode",
+                                        options=[
+                                            {"label": "All shots", "value": "all"},
+                                            {"label": "Goals only", "value": "goals"},
                                         ],
-                                        className="sankey-mode-copy",
+                                        value="all",
+                                        inline=True,
+                                        className="sankey-toggle",
+                                        labelClassName="shot-map-option",
+                                        inputClassName="shot-map-radio",
                                     ),
                                 ],
-                                className="sankey-toolbar",
+                                className="sankey-toolbar sankey-toolbar-controls",
+                            ),
+                            html.P(
+                                "Link widths show shot counts; each league diagram "
+                                "is scaled independently. Hover percentages show "
+                                "the share of the source category, not goal "
+                                "conversion rates.",
+                                className="sankey-method-note",
                             ),
                             html.Div(
-                                dcc.Graph(
-                                    id="sankey-all-graph",
-                                    figure=create_sankey_figure(shots),
-                                    config={
-                                        "displayModeBar": False,
-                                        "responsive": True,
-                                    },
-                                    className="sankey-graph",
-                                ),
-                                id="sankey-all-view",
-                            ),
-                            html.Div(
-                                dcc.Graph(
-                                    id="sankey-goals-graph",
-                                    figure=create_sankey_figure(shots, mode="goals"),
-                                    config={
-                                        "displayModeBar": False,
-                                        "responsive": True,
-                                    },
-                                    className="sankey-graph",
-                                ),
-                                id="sankey-goals-view",
-                                style={"display": "none"},
+                                [
+                                    html.Section(
+                                        [
+                                            html.H3(
+                                                "NWSL · 2023",
+                                                className="sankey-league-title nwsl",
+                                                id="nwsl-sankey-title",
+                                            ),
+                                            html.P(
+                                                f"{len(league_shots['nwsl']):,} shots represented",
+                                                id="nwsl-sankey-count",
+                                                className="sankey-league-count",
+                                                **{"aria-live": "polite"},
+                                            ),
+                                            dcc.Graph(
+                                                id="nwsl-sankey-graph",
+                                                figure=create_sankey_figure(
+                                                    league_shots["nwsl"],
+                                                    category_orders=sankey_orders["all"],
+                                                ),
+                                                config={
+                                                    "displayModeBar": False,
+                                                    "responsive": True,
+                                                },
+                                                style={"height": "500px"},
+                                                className="sankey-graph",
+                                            ),
+                                        ],
+                                        className="sankey-league-panel",
+                                    ),
+                                    html.Section(
+                                        [
+                                            html.H3(
+                                                "WSL · 2023/24",
+                                                className="sankey-league-title wsl",
+                                                id="wsl-sankey-title",
+                                            ),
+                                            html.P(
+                                                f"{len(league_shots['wsl']):,} shots represented",
+                                                id="wsl-sankey-count",
+                                                className="sankey-league-count",
+                                                **{"aria-live": "polite"},
+                                            ),
+                                            dcc.Graph(
+                                                id="wsl-sankey-graph",
+                                                figure=create_sankey_figure(
+                                                    league_shots["wsl"],
+                                                    category_orders=sankey_orders["all"],
+                                                ),
+                                                config={
+                                                    "displayModeBar": False,
+                                                    "responsive": True,
+                                                },
+                                                style={"height": "500px"},
+                                                className="sankey-graph",
+                                            ),
+                                        ],
+                                        className="sankey-league-panel",
+                                    ),
+                                ],
+                                className="sankey-comparison-grid",
+                                id="sankey-comparison-grid",
                             ),
                         ],
                         className="visualization-card sankey-card",
@@ -560,37 +572,38 @@ def create_app(shots: pd.DataFrame) -> Dash:
         )
 
     @app.callback(
-        Output("sankey-all-view", "style"),
-        Output("sankey-goals-view", "style"),
-        Output("sankey-observation-count", "children"),
-        Output("sankey-mode-description", "children"),
+        Output("nwsl-sankey-graph", "figure"),
+        Output("wsl-sankey-graph", "figure"),
+        Output("nwsl-sankey-count", "children"),
+        Output("wsl-sankey-count", "children"),
         Input("sankey-mode", "value"),
     )
     def update_sankey(mode: str):
-        if mode == "goals":
-            selected_count = int(shots["shot_outcome"].eq("Goal").sum())
-            description = (
-                "Showing goals only. This three-stage view omits Outcome; "
-                "observations are from both leagues. "
-                "Link widths are rescaled between modes and should not be "
-                "compared as absolute counts."
-            )
-            observation_label = "goals"
-        elif mode == "all":
-            selected_count = len(shots)
-            description = (
-                "Showing all shots across both leagues. Link widths are rescaled "
-                "between modes and should not be compared as absolute counts."
-            )
-            observation_label = "shots"
-        else:
+        if mode not in {"all", "goals"}:
             raise ValueError(f"Unsupported Sankey mode: {mode}")
 
+        selected_orders = sankey_orders[mode]
+        selected_league_shots = {}
+        figures = {}
+        for league, league_data in league_shots.items():
+            selected = (
+                league_data.loc[league_data["shot_outcome"].eq("Goal")]
+                if mode == "goals"
+                else league_data
+            )
+            selected_league_shots[league] = selected
+            figures[league] = create_sankey_figure(
+                league_data,
+                mode=mode,
+                category_orders=selected_orders,
+            )
+
+        observation_label = "goals" if mode == "goals" else "shots"
         return (
-            {"display": "block" if mode == "all" else "none"},
-            {"display": "block" if mode == "goals" else "none"},
-            f"{selected_count:,} {observation_label} represented",
-            description,
+            figures["nwsl"],
+            figures["wsl"],
+            f"{len(selected_league_shots['nwsl']):,} {observation_label} represented",
+            f"{len(selected_league_shots['wsl']):,} {observation_label} represented",
         )
 
     return app

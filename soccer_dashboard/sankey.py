@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
+
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -100,7 +102,41 @@ def _stage_labels(categories: pd.DataFrame, column: str) -> list[str]:
     return sorted(counts.index, key=lambda label: (-counts[label], label.casefold()))
 
 
-def create_sankey_figure(shots: pd.DataFrame, mode: str = "all") -> go.Figure:
+def sankey_category_orders(
+    league_shots: Mapping[str, pd.DataFrame], mode: str = "all"
+) -> dict[str, list[str]]:
+    """Return mode-specific stage category orders shared across league figures."""
+    if mode not in {"all", "goals"}:
+        raise ValueError("Sankey mode must be 'all' or 'goals'.")
+
+    stages = _GOALS_ONLY_STAGES if mode == "goals" else _STAGES
+    category_frames = []
+    for shots in league_shots.values():
+        selected_shots = (
+            shots.loc[shots["shot_outcome"].eq("Goal")]
+            if mode == "goals"
+            else shots
+        )
+        category_frames.append(_prepare_categories(selected_shots))
+
+    columns = [column for column, _ in stages]
+    categories = (
+        pd.concat(category_frames, ignore_index=True)[columns]
+        if category_frames
+        else pd.DataFrame(columns=columns)
+    )
+    return {
+        column: _stage_labels(categories, column)
+        for column, _ in stages
+    }
+
+
+def create_sankey_figure(
+    shots: pd.DataFrame,
+    mode: str = "all",
+    *,
+    category_orders: Mapping[str, Sequence[str]] | None = None,
+) -> go.Figure:
     """Create a shot-count Sankey for all shots or goals only.
 
     Play-pattern and body-part categories under 1% of the selected observations
@@ -128,7 +164,13 @@ def create_sankey_figure(shots: pd.DataFrame, mode: str = "all") -> go.Figure:
     for (column, stage_label), color in zip(
         stages, _STAGE_COLORS[: len(stages)], strict=True
     ):
-        for label in _stage_labels(categories, column):
+        labels = _stage_labels(categories, column)
+        if category_orders is not None and column in category_orders:
+            shared_order = list(category_orders[column])
+            labels = [label for label in shared_order if label in labels] + [
+                label for label in labels if label not in shared_order
+            ]
+        for label in labels:
             node_index[(column, label)] = len(node_labels)
             node_labels.append(label)
             node_stages.append(stage_label)
@@ -176,8 +218,8 @@ def create_sankey_figure(shots: pd.DataFrame, mode: str = "all") -> go.Figure:
                 "label": node_labels,
                 "customdata": node_stages,
                 "color": node_colors,
-                "pad": 18,
-                "thickness": 18,
+                "pad": 12,
+                "thickness": 12,
                 "line": {"color": "rgba(220,230,221,0.26)", "width": 0.6},
                 "hovertemplate": (
                     "Stage: %{customdata}<br>Category: %{label}<extra></extra>"
@@ -206,7 +248,7 @@ def create_sankey_figure(shots: pd.DataFrame, mode: str = "all") -> go.Figure:
         plot_bgcolor="#111a17",
         font={"family": "DM Sans, Segoe UI, sans-serif", "color": "#f0f3ed", "size": 12},
         margin={"l": 12, "r": 12, "t": 20, "b": 12},
-        height=700,
+        height=500,
         autosize=True,
         uirevision=f"shot-characteristics-sankey-{mode}",
     )
