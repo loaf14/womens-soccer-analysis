@@ -78,15 +78,14 @@ route; Render's free service does not provide persistent runtime storage.
 ### Data exposure and licensing note
 
 The Parquet file is not tracked by Git and the app has no route that serves it
-for download. However, the interactive **Individual shots** map sends shot-level
-coordinates and hover fields (including player, team, competition, outcome, shot
-type, body part, and play pattern) to the browser as part of its Plotly figure.
-Those values can be inspected in the browser's network responses. The map
-therefore exposes underlying event-level data even though the Parquet file
-itself is not downloadable from a dedicated URL. Confirm that this form of
-interactive publication is permitted under the Public Data User Agreement before
-making the service public; if not, obtain written permission or replace the
-event-level display with appropriately aggregated output.
+for download. Shot maps aggregate observations into 4-by-4-coordinate-unit bins
+before constructing Plotly figures: **Binned shots** shows goal and non-goal
+counts per bin, **Heatmap** shows total counts per bin, and **Hybrid** combines
+the total-count heatmap with aggregated goal counts. No shot IDs, player or team
+names, event-level locations, or event metadata are added to these traces.
+Nevertheless, even spatially aggregated counts may be governed by the User
+Agreement. Confirm that this visualization is permitted before making the
+service public; if not, obtain written permission or remove the affected data.
 
 Render's free web services can spin down when idle, so the first request may
 take longer. The build re-fetches the source data on each new deploy; an upstream

@@ -9,7 +9,7 @@ from typing import Literal
 import pandas as pd
 import plotly.graph_objects as go
 
-ShotMapMode = Literal["individual", "heatmap", "hybrid"]
+ShotMapMode = Literal["binned", "heatmap", "hybrid"]
 
 PITCH_LENGTH = 120
 PITCH_WIDTH = 80
@@ -30,17 +30,6 @@ HEATMAP_COLORS = [
     [0.68, "#49bd70"],
     [1, "#c5edaf"],
 ]
-
-_TOOLTIP_FIELDS = (
-    ("Player", "player"),
-    ("Team", "team"),
-    ("Competition", "competition_name"),
-    ("Outcome", "shot_outcome"),
-    ("Shot type", "shot_type"),
-    ("Body part", "shot_body_part"),
-    ("Play pattern", "play_pattern"),
-)
-
 
 def _pitch_coordinates(location: object) -> tuple[float, float] | None:
     if isinstance(location, (str, bytes)) or not pd.api.types.is_list_like(location):
@@ -208,34 +197,27 @@ def _pitch_arc_traces() -> list[go.Scatter]:
     ]
 
 
-def _display_value(value: object) -> str:
-    if value is None or pd.isna(value):
-        return "Unknown"
-    text = str(value).strip()
-    return text if text else "Unknown"
-
-
-def _customdata(shots: pd.DataFrame) -> list[list[str]]:
-    return [
-        [
-            *[_display_value(row.get(column)) for _, column in _TOOLTIP_FIELDS],
-            f"{row['statsbomb_x']:.1f}",
-            f"{row['statsbomb_y']:.1f}",
-        ]
-        for _, row in shots.iterrows()
-    ]
-
-
-_SHOT_HOVER_TEMPLATE = (
-    "<b>%{customdata[0]}</b> · %{customdata[1]}<br>"
-    "%{customdata[2]}<br>"
-    "Outcome: %{customdata[3]}<br>"
-    "Shot type: %{customdata[4]}<br>"
-    "Body part: %{customdata[5]}<br>"
-    "Play pattern: %{customdata[6]}<br>"
-    "StatsBomb location: (%{customdata[7]}, %{customdata[8]})"
-    "<extra></extra>"
-)
+def _binned_shot_counts(shots: pd.DataFrame) -> pd.DataFrame:
+    x_start = -HALF_PITCH_WIDTH / 2
+    x_bin_count = int(HALF_PITCH_WIDTH / DENSITY_BIN_SIZE)
+    y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
+    binned = shots.assign(
+        x_bin=((shots["map_x"] - x_start) / DENSITY_BIN_SIZE)
+        .astype(int)
+        .clip(upper=x_bin_count - 1),
+        y_bin=(shots["map_y"] / DENSITY_BIN_SIZE)
+        .astype(int)
+        .clip(upper=y_bin_count - 1),
+    )
+    counts = (
+        binned.groupby(["x_bin", "y_bin", "is_goal"], sort=True)
+        .size()
+        .rename("shot_count")
+        .reset_index()
+    )
+    counts["map_x"] = x_start + (counts["x_bin"] + 0.5) * DENSITY_BIN_SIZE
+    counts["map_y"] = (counts["y_bin"] + 0.5) * DENSITY_BIN_SIZE
+    return counts
 
 
 def _density_grid(
@@ -245,11 +227,8 @@ def _density_grid(
     x_bin_count = int(HALF_PITCH_WIDTH / DENSITY_BIN_SIZE)
     y_bin_count = int(HALF_PITCH_LENGTH / DENSITY_BIN_SIZE)
     counts = [[0] * y_bin_count for _ in range(x_bin_count)]
-    for x, y in zip(shots["map_x"], shots["map_y"], strict=True):
-        # Clamp the maximum pitch edges into the final bins.
-        x_bin = min(int((x - x_start) / DENSITY_BIN_SIZE), x_bin_count - 1)
-        y_bin = min(int(y / DENSITY_BIN_SIZE), y_bin_count - 1)
-        counts[x_bin][y_bin] += 1
+    for row in _binned_shot_counts(shots).itertuples(index=False):
+        counts[row.x_bin][row.y_bin] += row.shot_count
 
     x_centers = [
         x_start + (index + 0.5) * DENSITY_BIN_SIZE
@@ -317,6 +296,7 @@ def _add_density(
 def _add_shot_markers(
     fig: go.Figure, shots: pd.DataFrame, *, goals_only: bool
 ) -> None:
+    binned_counts = _binned_shot_counts(shots)
     if goals_only:
         groups = [(True, "Goals", GOAL_COLOR, 11)]
     else:
@@ -326,7 +306,7 @@ def _add_shot_markers(
         ]
 
     for is_goal, label, color, size in groups:
-        group = shots.loc[shots["is_goal"].eq(is_goal)]
+        group = binned_counts.loc[binned_counts["is_goal"].eq(is_goal)]
         fig.add_trace(
             go.Scattergl(
                 x=group["map_x"],
@@ -335,15 +315,21 @@ def _add_shot_markers(
                 name=label,
                 marker={
                     "color": color,
-                    "size": size,
+                    "size": [
+                        size + min(12, 3 * math.sqrt(count))
+                        for count in group["shot_count"]
+                    ],
                     "opacity": 0.86 if is_goal else 0.48,
                     "line": {
                         "color": "#f8f2e7" if is_goal else "rgba(0,0,0,0)",
                         "width": 1 if is_goal else 0,
                     },
                 },
-                customdata=_customdata(group),
-                hovertemplate=_SHOT_HOVER_TEMPLATE,
+                customdata=[[int(count)] for count in group["shot_count"]],
+                hovertemplate=(
+                    f"{label} in 4-by-4-unit bin: "
+                    "%{customdata[0]:,.0f}<extra></extra>"
+                ),
             )
         )
 
@@ -354,16 +340,15 @@ def create_shot_map(
     *,
     density_max: int | None = None,
 ) -> go.Figure:
-    """Create an individual, shot-frequency, or hybrid attacking-half map.
+    """Create a binned-shot, shot-frequency, or hybrid attacking-half map.
 
-    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. All shot data remains in
-    the figure traces and heatmap calculation; the axes focus the visible
-    window on StatsBomb x=95..120 and y=10..70. Density uses 4-by-4
-    coordinate-unit bins over the attacking half and represents shot
-    frequency, not scoring probability. ``density_max`` can set a common
-    color-scale maximum when comparing multiple league maps.
+    StatsBomb ``(x, y)`` maps to ``(y - 40, x - 60)``. Shot counts are aggregated
+    into 4-by-4 coordinate-unit bins over the attacking half before being added
+    to any trace. The axes focus the visible window on StatsBomb x=95..120 and
+    y=10..70. Heat intensity represents shot frequency, not scoring probability.
+    ``density_max`` can set a common color-scale maximum when comparing leagues.
     """
-    if mode not in {"individual", "heatmap", "hybrid"}:
+    if mode not in {"binned", "heatmap", "hybrid"}:
         raise ValueError(f"Unknown shot map mode: {mode!r}")
 
     prepared = prepare_shot_coordinates(shots)
@@ -420,7 +405,7 @@ def create_shot_map(
 
     for trace in _pitch_arc_traces():
         fig.add_trace(trace)
-    if mode == "individual":
+    if mode == "binned":
         _add_shot_markers(fig, in_half, goals_only=False)
     elif mode == "hybrid":
         _add_shot_markers(fig, in_half, goals_only=True)

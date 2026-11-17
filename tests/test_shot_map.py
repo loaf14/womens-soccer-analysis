@@ -1,3 +1,4 @@
+import json
 import pandas as pd
 import pytest
 
@@ -136,19 +137,25 @@ def test_pitch_geometry_matches_statsbomb_half_pitch_dimensions():
     assert "Corner arcs" in {trace.name for trace in figure.data}
 
 
-def test_individual_mode_separates_goals_and_non_goals_and_counts_mapped_shots(
+def test_binned_mode_separates_goals_and_non_goals_without_event_rows(
     shot_map_shots,
 ):
-    figure = create_shot_map(shot_map_shots, mode="individual")
+    figure = create_shot_map(shot_map_shots, mode="binned")
     goals = _trace_by_name(figure, "Goals")
     non_goals = _trace_by_name(figure, "Non-goals")
 
     assert len(goals.x) == 2
     assert len(non_goals.x) == 1
-    assert len(goals.x) + len(non_goals.x) == 3
-    assert list(goals.x) == [0.0, -40.0]
+    assert sum(row[0] for row in goals.customdata) == 2
+    assert sum(row[0] for row in non_goals.customdata) == 1
+    assert list(goals.x) == [-38.0, 2.0]
     assert goals.marker.color == "#f0ad5e"
     assert non_goals.marker.color == "#a9b8e8"
+    payload = figure.to_json()
+    assert "goal-central" not in payload
+    assert "Forward" not in payload
+    assert "NWSL City" not in payload
+    assert "108.0" not in payload
 
 
 def test_heatmap_uses_every_valid_shot_in_attacking_half_and_documented_bins(
@@ -241,6 +248,37 @@ def test_hybrid_uses_same_all_shot_density_and_adds_only_goals(shot_map_shots):
     assert len(goals.x) == 2
     assert "Non-goals" not in {trace.name for trace in hybrid.data}
     assert list(hybrid.data).index(hybrid_density) < list(hybrid.data).index(goals)
+    assert sum(row[0] for row in goals.customdata) == 2
+    assert "Forward" not in hybrid.to_json()
+
+
+@pytest.mark.parametrize("mode", ["binned", "heatmap", "hybrid"])
+def test_serialized_modes_contain_only_aggregated_shot_data(
+    shot_map_shots, mode
+):
+    figure = create_shot_map(shot_map_shots, mode=mode)
+    payload = json.loads(figure.to_json())
+
+    for event_value in (
+        "goal-central",
+        "save-left",
+        "Forward",
+        "NWSL City",
+        "London WFC",
+        "shot_key_pass_id",
+        '"player"',
+        '"team"',
+        '"match_id"',
+    ):
+        assert event_value not in json.dumps(payload)
+
+    for trace in payload["data"]:
+        if trace.get("name") in {"Goals", "Non-goals"}:
+            assert trace["type"] == "scattergl"
+            assert trace["hovertemplate"].endswith("<extra></extra>")
+            assert "Player" not in trace["hovertemplate"]
+            assert "StatsBomb location" not in trace["hovertemplate"]
+            assert all(isinstance(row[0], int) for row in trace["customdata"])
 
 
 def test_hybrid_is_default_mode(shot_map_shots):
@@ -251,15 +289,15 @@ def test_hybrid_is_default_mode(shot_map_shots):
     assert "Non-goals" not in {trace.name for trace in figure.data}
 
 
-def test_invalid_optional_tooltip_values_are_rendered_as_unknown(shot_map_shots):
-    figure = create_shot_map(shot_map_shots, mode="individual")
+def test_binned_marker_hover_contains_only_aggregate_counts(shot_map_shots):
+    figure = create_shot_map(shot_map_shots, mode="binned")
     non_goals = _trace_by_name(figure, "Non-goals")
 
-    assert non_goals.customdata[0][0] == "Unknown"
-    assert non_goals.hovertemplate
+    assert [row[0] for row in non_goals.customdata] == [1]
+    assert "Non-goals in 4-by-4-unit bin" in non_goals.hovertemplate
 
 
-@pytest.mark.parametrize("mode", ["individual", "heatmap", "hybrid"])
+@pytest.mark.parametrize("mode", ["binned", "heatmap", "hybrid"])
 def test_empty_shots_produce_valid_empty_figures(mode):
     empty_shots = pd.DataFrame(
         columns=[
@@ -277,7 +315,7 @@ def test_empty_shots_produce_valid_empty_figures(mode):
     assert figure.layout.shapes
     if mode in {"heatmap", "hybrid"}:
         assert sum(map(sum, _trace_by_name(figure, "Shot frequency").z)) == 0
-    if mode in {"individual", "hybrid"}:
+    if mode in {"binned", "hybrid"}:
         assert len(_trace_by_name(figure, "Goals").x) == 0
 
 

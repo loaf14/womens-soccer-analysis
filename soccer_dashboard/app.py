@@ -225,8 +225,8 @@ def create_app(shots: pd.DataFrame) -> Dash:
                                                         "value": "hybrid",
                                                     },
                                                     {
-                                                        "label": "Individual shots",
-                                                        "value": "individual",
+                                                        "label": "Binned shots",
+                                                        "value": "binned",
                                                     },
                                                     {
                                                         "label": "Heatmap",

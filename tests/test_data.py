@@ -322,6 +322,8 @@ def test_dash_layout_renders_dashboard_and_data_source(dashboard_shots):
     assert response.status_code == 200
     assert b"The Anatomy of a Goal" in response.data
     assert b"StatsBomb Open Data" in response.data
+    assert b"Binned shots" in response.data
+    assert b"Individual shots" not in response.data
 
 
 def test_gunicorn_factory_uses_prepared_data_without_api_requests(
@@ -502,7 +504,7 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
     assert components["shot-map-view"]["value"] == "hybrid"
     assert {
         option["value"] for option in components["shot-map-view"]["options"]
-    } == {"individual", "heatmap", "hybrid"}
+    } == {"binned", "heatmap", "hybrid"}
     assert components["sankey-comparison-grid"]["className"] == (
         "sankey-comparison-grid"
     )
@@ -610,7 +612,7 @@ def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
     ("mode", "expected_traces", "expected_marker_counts", "expected_density_count"),
     [
         (
-            "individual",
+            "binned",
             {"Penalty arc", "Corner arcs", "Goals", "Non-goals"},
             {"Goals": 1, "Non-goals": 1},
             None,
@@ -671,6 +673,9 @@ def test_shot_map_view_callback_switches_figure(
         assert set(traces) == expected_traces
         for name, count in expected_marker_counts.items():
             assert len(traces[name]["customdata"]) == count
+            assert all(
+                isinstance(row[0], int) for row in traces[name]["customdata"]
+            )
         if expected_density_count is not None:
             density = traces["Shot frequency"]
             assert sum(sum(row) for row in density["z"]) == expected_density_count
