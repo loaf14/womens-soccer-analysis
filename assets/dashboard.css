@@ -336,54 +336,33 @@ a {
   min-width: 0;
 }
 
-.conversion-card .visualization-heading {
-  display: block;
+.comparison-chart-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
 }
 
-.conversion-card .visualization-heading .section-subtitle {
-  margin-top: 0.4rem;
-}
-
-.conversion-chart,
-.conversion-chart .js-plotly-plot,
-.conversion-chart .plot-container,
-.conversion-chart .svg-container {
+.conversion-comparison-chart,
+.conversion-comparison-chart .js-plotly-plot,
+.conversion-comparison-chart .plot-container,
+.conversion-comparison-chart .svg-container {
   width: 100% !important;
   min-width: 0;
 }
 
 .conversion-method-note {
-  margin: 0.25rem 0 0;
+  margin: 0.75rem 0 0;
   color: var(--color-muted);
   font-size: 0.75rem;
   line-height: 1.5;
 }
 
-.play-pattern-card {
-  min-width: 0;
-}
-
-.play-pattern-card .visualization-heading {
-  display: block;
-}
-
-.play-pattern-card .visualization-heading .section-subtitle {
-  margin-top: 0.4rem;
-}
-
-.play-pattern-chart,
-.play-pattern-chart .js-plotly-plot,
-.play-pattern-chart .plot-container,
-.play-pattern-chart .svg-container {
-  width: 100% !important;
-  min-width: 0;
-}
-
-.play-pattern-method-note {
+.conversion-chart-note {
   margin: 0.25rem 0 0;
   color: var(--color-muted);
-  font-size: 0.75rem;
-  line-height: 1.5;
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 .sankey-graph {
@@ -654,6 +633,10 @@ a {
 
   .source-badge {
     min-width: 185px;
+  }
+
+  .goal-conversion-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .sankey-toolbar {
