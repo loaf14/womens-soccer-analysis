@@ -306,26 +306,53 @@ def test_rare_body_parts_are_grouped_as_other():
     assert "Other" in labels
 
 
-def test_rare_play_patterns_are_grouped_without_dropping_observations():
+def test_infrequent_play_patterns_remain_distinct_across_leagues_and_modes():
     shots = pd.DataFrame(
         {
-            "play_pattern": ["Regular Play"] * 200 + ["From Keeper"],
+            "play_pattern": ["Regular Play"] * 200 + ["From Kick Off"],
             "in_box": [True] * 201,
             "shot_body_part": ["Right Foot"] * 201,
-            "shot_outcome": ["Saved"] * 201,
+            "shot_outcome": ["Saved"] * 199 + ["Goal", "Goal"],
         }
     )
-    trace = _sankey(create_sankey_figure(shots))
+    other_league = pd.DataFrame(
+        {
+            "play_pattern": ["Regular Play"] * 200 + ["From Corner"],
+            "in_box": [False] * 201,
+            "shot_body_part": ["Left Foot"] * 201,
+            "shot_outcome": ["Saved"] * 200 + ["Goal"],
+        }
+    )
+    league_shots = {"nwsl": shots, "wsl": other_league}
+    all_orders = sankey_category_orders(league_shots)
+    goal_orders = sankey_category_orders(league_shots, mode="goals")
 
-    assert "From Keeper" not in list(trace.node.label)
-    assert _link_count(
-        trace,
-        "Shot location",
-        "Inside box",
-        "Play pattern",
-        "Other",
-    ) == 1
-    assert _transition_total(trace, "Shot location", "Play pattern") == len(shots)
+    assert all_orders["play_pattern"] == goal_orders["play_pattern"]
+    assert "From Kick Off" in all_orders["play_pattern"]
+    assert "Other" not in all_orders["play_pattern"]
+
+    for mode, orders in (("all", all_orders), ("goals", goal_orders)):
+        nwsl_trace = _sankey(
+            create_sankey_figure(shots, mode=mode, category_orders=orders)
+        )
+        wsl_trace = _sankey(
+            create_sankey_figure(
+                other_league, mode=mode, category_orders=orders
+            )
+        )
+
+        assert _node_index(nwsl_trace, "Play pattern", "From Kick Off") >= 0
+        assert "From Kick Off" not in list(wsl_trace.node.label)
+        assert _link_count(
+            nwsl_trace,
+            "Shot location",
+            "Inside box",
+            "Play pattern",
+            "From Kick Off",
+        ) == 1
+        assert _transition_total(
+            nwsl_trace, "Shot location", "Play pattern"
+        ) == (201 if mode == "all" else 2)
 
 
 def test_shared_category_orders_align_league_categories_without_inventing_nodes():

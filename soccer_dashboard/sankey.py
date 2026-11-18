@@ -8,7 +8,6 @@ import pandas as pd
 import plotly.graph_objects as go
 
 BODY_PART_RARE_SHARE = 0.01
-PLAY_PATTERN_RARE_SHARE = 0.01
 
 _PLAY_PATTERN_ORDER = (
     "From Corner",
@@ -18,7 +17,6 @@ _PLAY_PATTERN_ORDER = (
     "From Keeper",
     "From Kick Off",
     "From Throw In",
-    "Other",
     "Regular Play",
     "Unknown",
 )
@@ -73,20 +71,7 @@ def _prepare_categories(shots: pd.DataFrame) -> pd.DataFrame:
 
     categories = pd.DataFrame(index=shots.index)
     play_patterns = shots["play_pattern"].map(_category_label)
-    play_pattern_counts = play_patterns.value_counts()
-    rare_patterns = (
-        {
-            pattern
-            for pattern, count in play_pattern_counts.items()
-            if pattern not in {"Other", "Unknown"}
-            and count / len(shots) < PLAY_PATTERN_RARE_SHARE
-        }
-        if not shots.empty
-        else set()
-    )
-    categories["play_pattern"] = play_patterns.mask(
-        play_patterns.isin(rare_patterns), "Other"
-    )
+    categories["play_pattern"] = play_patterns
     categories["shot_location"] = shots["in_box"].map(
         lambda value: (
             "Unknown"
@@ -169,12 +154,12 @@ def create_sankey_figure(
 ) -> go.Figure:
     """Create a shot-count Sankey for all shots or goals only.
 
-    Play-pattern and body-part categories under 1% of the selected observations
-    are grouped as ``Other``. Link percentages use the selected-mode total
-    leaving the source category as their denominator; they are not conversion
-    rates. Missing or blank values are shown as ``Unknown``. In goals-only
-    mode, only observations with the literal ``Goal`` outcome are included and
-    the Outcome stage is omitted.
+    Body-part categories under 1% of the selected observations are grouped as
+    ``Other``. Play-pattern categories are retained as recorded. Link
+    percentages use the selected-mode total leaving the source category as
+    their denominator; they are not conversion rates. Missing or blank values
+    are shown as ``Unknown``. In goals-only mode, only observations with the
+    literal ``Goal`` outcome are included and the Outcome stage is omitted.
     """
     if mode not in {"all", "goals"}:
         raise ValueError("Sankey mode must be 'all' or 'goals'.")
