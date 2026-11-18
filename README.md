@@ -53,9 +53,9 @@ python -m soccer_dashboard.app
 ```
 
 The app loads the local Parquet cache rather than making network requests during
-startup and displays the total shots across both seasons. The existing
-[`exploration.ipynb`](./exploration.ipynb) is retained unchanged. The
-[Anatomy of a Goal notebook](./the_anatomy_of_a_goal.ipynb) is also available
+startup and displays the total shots across both seasons. The exploratory
+`exploration.ipynb` notebook is kept locally and excluded from the repository.
+The [Anatomy of a Goal notebook](./the_anatomy_of_a_goal.ipynb) is available
 in the repository.
 
 ## Deploy on Render
