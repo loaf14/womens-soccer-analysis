@@ -524,8 +524,8 @@ def test_dashboard_has_all_visualizations(dashboard_shots):
         assert "Source category" in trace["link"]["hovertemplate"]
         assert "Source category total" in trace["link"]["hovertemplate"]
         assert list(dict.fromkeys(trace["node"]["customdata"])) == [
-            "Play pattern",
             "Shot location",
+            "Play pattern",
             "Body part",
             "Outcome",
         ]
@@ -611,8 +611,8 @@ def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
     ):
         goal_trace = goals_result[graph_id]["figure"]["data"][0]
         assert list(dict.fromkeys(goal_trace["node"]["customdata"])) == [
-            "Play pattern",
             "Shot location",
+            "Play pattern",
             "Body part",
         ]
         assert sum(goal_trace["link"]["value"]) == 2 * shot_count
@@ -626,8 +626,8 @@ def test_sankey_mode_callback_switches_to_goals_and_back(dashboard_shots):
     ):
         all_trace = all_result[graph_id]["figure"]["data"][0]
         assert list(dict.fromkeys(all_trace["node"]["customdata"])) == [
-            "Play pattern",
             "Shot location",
+            "Play pattern",
             "Body part",
             "Outcome",
         ]
