@@ -54,7 +54,9 @@ python -m soccer_dashboard.app
 
 The app loads the local Parquet cache rather than making network requests during
 startup and displays the total shots across both seasons. The existing
-[`exploration.ipynb`](./exploration.ipynb) is retained unchanged.
+[`exploration.ipynb`](./exploration.ipynb) is retained unchanged. The
+[Anatomy of a Goal notebook](./the_anatomy_of_a_goal.ipynb) is also available
+in the repository.
 
 ## Deploy on Render
 
@@ -78,13 +80,16 @@ route; Render's free service does not provide persistent runtime storage.
 ### Data exposure and licensing note
 
 The Parquet file is not tracked by Git and the app has no route that serves it
-for download. Section 01, **Where teams take their shots**, displays only 4-by-4-coordinate-
-unit heatmap bins of shot counts, with the same bin boundaries and shared color
-scale for both leagues. No mode selector, event-level markers, locations, or
-metadata are sent to the browser. Spatially aggregated counts may still be
-governed by the User Agreement; confirm that these visualizations are permitted
-before making the service public. If not, obtain written permission or remove
-the affected data.
+for download. Section 01, **Where teams take their shots**, displays only 4-by-4-
+coordinate-unit heatmap bins of shot counts, with the same bin boundaries and
+shared color scale for both leagues. The live dashboard does not expose
+individual shot coordinates, event-level markers, or shot metadata to the
+browser. The [Anatomy of a Goal notebook](./the_anatomy_of_a_goal.ipynb)
+includes static screenshots documenting earlier visualization approaches,
+including individual-shot markers, as part of the exploration process. Spatially
+aggregated counts may still be governed by the User Agreement; confirm that
+these visualizations are permitted before making the service public. If not,
+obtain written permission or remove the affected data.
 
 Render's free web services can spin down when idle, so the first request may
 take longer. The build re-fetches the source data on each new deploy; an upstream
